@@ -72,3 +72,7 @@ block:
 camera:
   width: 320
   height: 240
+
+# Specific to L4ML Project
+num_cameras: 3
+num_episodes: 100

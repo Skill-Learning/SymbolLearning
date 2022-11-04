@@ -41,12 +41,14 @@ def subsample(pts, rate):
 class GenerateData():
     def __init__(self, cfg):
     # Create Environment 
+        from pdb import set_trace
+        # set_trace()
         self.scene = GymScene(cfg['scene'])
-        self.franka = GymFranka(cfg['franka'], self.scene)
-        self.table = GymBoxAsset(cfg['table'])
+        self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode = 'attractors')
+        self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
         # TODO: Sample block sizes from a distribution later
         # TODO: Add more shapes to sample from in the train function 
-        self.block = GymBoxAsset(cfg['block'])
+        self.block = GymBoxAsset(self.scene, **cfg['block']['dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'])
 
         self.franka_name, self.table_name, self.block_name = 'franka', 'table', 'block'
 
@@ -95,11 +97,12 @@ class GenerateData():
         def setup(scene, _):
             self.scene.add_asset('table', self.table, self.table_transform)
             self.scene.add_asset('franka', self.franka, self.franka_transform, collision_filter = 1)
+            self.scene.add_asset('block', self.block, gymapi.Transform(), collision_filter = 1)
             for i in range(cfg['num_cameras']):
                 self.scene.add_standalone_camera(self.camera_names[i], self.camera, self.camera_transforms[i])
             
         self.scene.setup_all_envs(setup)
-        
+
         # for drawing stuff in the scene
     def custom_draws(self,scene):
         for env_idx in scene.env_idxs:
@@ -123,15 +126,13 @@ class GenerateData():
         for env_idx in self.scene.env_idxs:
             self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
 
-        actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide']
-        action = actions[0]
+        actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
+        action = actions[-1]
         # TODO: Create a new policy class for an ensemble of policies and the function selects the policy depending 
         # TODO: on the action selected from the draw
         if action == 'PokeX':
-            # policy = PokeXPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            pose = gymapi.Transform( p = gymapi.Vec3(0,3, -0.025, 0.52))
-            policy = GraspPointPolicy(self.franka, self.franka_name, pose)
-            # action_vec = torch.tensor([1, 0, 0, 0, 0])
+            policy = PokeXPolicy(self.franka, self.franka_name, self.block, self.block_name)
+            action_vec = torch.tensor([1, 0, 0, 0, 0])
         elif action == 'PokeY':
             policy = PokeYPolicy(self.franka, self.franka_name, self.block, self.block_name)
             action_vec = torch.tensor([0, 1, 0, 0, 0])
@@ -144,13 +145,17 @@ class GenerateData():
         elif action == 'GraspSide':
             policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
             action_vec = torch.tensor([0, 0, 0, 0, 1])
+        elif action == 'Testing':
+            ee_pose = self.franka.get_ee_transform(0, 'franka')
+            pose = gymapi.Transform(p = gymapi.Vec3(1, 1, 1), r = ee_pose.r)
+            policy = GraspPointPolicy(self.franka, self.franka_name, pose)
         else:
             raise ValueError(f"Invalid action {action}")
         
         # ! This is temporary, we will have to sample the policy from the ensemble of policies
         # policy = GraspBlockPolicy(self.franka, self.franka_name, self.block, self.block_name)
         # action_vec = torch.tensor([0, 0, 0, 0, 1])
-        policy.reset()
+        # policy.reset()
         # Collect Object data 
         # TODO: Collect object data 
         # TODO: This image/ pcd also need to have 2 extra channels for positional encoding 
@@ -166,7 +171,8 @@ class GenerateData():
         obs_initial = []
         actions = []
         obs_final = []
-        for i in range(num_episodes):
+        for _ in range(num_episodes):
+            print('running')
             observation_initial, action_vec, observation_final = self.run_episode()
             obs_initial.append(observation_initial)
             actions.append(action_vec)
