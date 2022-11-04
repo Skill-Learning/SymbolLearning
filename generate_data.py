@@ -9,7 +9,7 @@ from isaacgym_utils.scene import GymScene
 from isaacgym_utils.assets import GymFranka, GymBoxAsset
 from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
-from .policy import PokeXPolicy, PokeYPolicy, GraspFrontPolicy, GraspTopPolicy, GraspSidePolicy, GraspBlockPolicy
+from policy import GraspPointPolicy
 from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
 
 from visualization.visualizer3d import Visualizer3D as vis3d
@@ -19,6 +19,7 @@ import torch
 # TODO: utils.py -> Observation Collection Class -> this collects pcd or image 
 # TODO: utils.py -> loggin class 
 
+np.random.seed(100)
 
 def vis_cam_images(image_list):
     for i in range(0, len(image_list)):
@@ -41,7 +42,7 @@ class GenerateData():
     def __init__(self, cfg):
     # Create Environment 
         self.scene = GymScene(cfg['scene'])
-        self.franka = GymFranka(cfg['franka'])
+        self.franka = GymFranka(cfg['franka'], self.scene)
         self.table = GymBoxAsset(cfg['table'])
         # TODO: Sample block sizes from a distribution later
         # TODO: Add more shapes to sample from in the train function 
@@ -123,12 +124,14 @@ class GenerateData():
             self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
 
         actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide']
-        action = np.random.choice(actions)
+        action = actions[0]
         # TODO: Create a new policy class for an ensemble of policies and the function selects the policy depending 
         # TODO: on the action selected from the draw
         if action == 'PokeX':
-            policy = PokeXPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([1, 0, 0, 0, 0])
+            # policy = PokeXPolicy(self.franka, self.franka_name, self.block, self.block_name)
+            pose = gymapi.Transform( p = gymapi.Vec3(0,3, -0.025, 0.52))
+            policy = GraspPointPolicy(self.franka, self.franka_name, pose)
+            # action_vec = torch.tensor([1, 0, 0, 0, 0])
         elif action == 'PokeY':
             policy = PokeYPolicy(self.franka, self.franka_name, self.block, self.block_name)
             action_vec = torch.tensor([0, 1, 0, 0, 0])
@@ -145,8 +148,8 @@ class GenerateData():
             raise ValueError(f"Invalid action {action}")
         
         # ! This is temporary, we will have to sample the policy from the ensemble of policies
-        policy = GraspBlockPolicy(self.franka, self.franka_name, self.block, self.block_name)
-        action_vec = torch.tensor([0, 0, 0, 0, 1])
+        # policy = GraspBlockPolicy(self.franka, self.franka_name, self.block, self.block_name)
+        # action_vec = torch.tensor([0, 0, 0, 0, 1])
         policy.reset()
         # Collect Object data 
         # TODO: Collect object data 
@@ -173,7 +176,7 @@ class GenerateData():
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='configs/sim.yaml')
+    parser.add_argument('--config', type=str, default='config/config.yaml')
     args = parser.parse_args()
     cfg = YamlConfig(args.config)
 
