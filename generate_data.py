@@ -9,7 +9,7 @@ from isaacgym_utils.scene import GymScene
 from isaacgym_utils.assets import GymFranka, GymBoxAsset
 from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
-from .policy import PokeXPolicy, PokeYPolicy, GraspFrontPolicy, GraspTopPolicy, GraspSidePolicy, GraspBlockPolicy
+from policy import GraspPointPolicy
 from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
 
 from visualization.visualizer3d import Visualizer3D as vis3d
@@ -18,7 +18,6 @@ import torch
 # TODO: Policy Class 
 # TODO: utils.py -> Observation Collection Class -> this collects pcd or image 
 # TODO: utils.py -> loggin class 
-
 
 def vis_cam_images(image_list):
     for i in range(0, len(image_list)):
@@ -40,12 +39,14 @@ def subsample(pts, rate):
 class GenerateData():
     def __init__(self, cfg):
     # Create Environment 
+        from pdb import set_trace
+        # set_trace()
         self.scene = GymScene(cfg['scene'])
-        self.franka = GymFranka(cfg['franka'])
-        self.table = GymBoxAsset(cfg['table'])
+        self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode = 'attractors')
+        self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
         # TODO: Sample block sizes from a distribution later
         # TODO: Add more shapes to sample from in the train function 
-        self.block = GymBoxAsset(cfg['block'])
+        self.block = GymBoxAsset(self.scene, **cfg['block']['dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'])
 
         self.franka_name, self.table_name, self.block_name = 'franka', 'table', 'block'
 
@@ -94,11 +95,12 @@ class GenerateData():
         def setup(scene, _):
             self.scene.add_asset('table', self.table, self.table_transform)
             self.scene.add_asset('franka', self.franka, self.franka_transform, collision_filter = 1)
+            self.scene.add_asset('block', self.block, gymapi.Transform(), collision_filter = 1)
             for i in range(cfg['num_cameras']):
                 self.scene.add_standalone_camera(self.camera_names[i], self.camera, self.camera_transforms[i])
             
         self.scene.setup_all_envs(setup)
-        
+
         # for drawing stuff in the scene
     def custom_draws(self,scene):
         for env_idx in scene.env_idxs:
@@ -122,40 +124,45 @@ class GenerateData():
         for env_idx in self.scene.env_idxs:
             self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
 
-        actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide']
-        action = np.random.choice(actions)
+        actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
+        action = actions[np.random.randint(0, len(actions))]
         # TODO: Create a new policy class for an ensemble of policies and the function selects the policy depending 
         # TODO: on the action selected from the draw
         if action == 'PokeX':
             policy = PokeXPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([1, 0, 0, 0, 0])
+            action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
         elif action == 'PokeY':
             policy = PokeYPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 1, 0, 0, 0])
+            action_vec = torch.tensor([0, 1, 0, 0, 0, 0])
         elif action == 'GraspTop':
             policy = GraspTopPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 1, 0, 0])
+            action_vec = torch.tensor([0, 0, 1, 0, 0, 0])
         elif action == 'GraspFront':
             policy = GraspFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 0, 1, 0])
+            action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
         elif action == 'GraspSide':
             policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 0, 0, 1])
+            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
+        elif action == 'Testing':
+            '''This is just a random condition to test the environment, move to the hardcoded position'''
+            ee_pose = self.franka.get_ee_transform(0, 'franka')
+            pose = gymapi.Transform(p = gymapi.Vec3(0.4, 0.4, 0.5), r = ee_pose.r)
+            policy = GraspPointPolicy(self.franka, self.franka_name, pose)
+            action_vec = torch.tensor([0, 0, 0, 0, 0, 1])
         else:
             raise ValueError(f"Invalid action {action}")
         
-        # ! This is temporary, we will have to sample the policy from the ensemble of policies
-        policy = GraspBlockPolicy(self.franka, self.franka_name, self.block, self.block_name)
-        action_vec = torch.tensor([0, 0, 0, 0, 1])
-        policy.reset()
         # Collect Object data 
         # TODO: Collect object data 
         # TODO: This image/ pcd also need to have 2 extra channels for positional encoding 
         # ! need to find a smarter way to encode position, like transformers do
+
+        # TODO: Collect scene before running policy
         observation_initial = torch.zeros(1, 3, 224, 224)
+        policy.reset()
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
 
-        # TODO: Collect data after the action 
+        # TODO: Collect scene after running policy
         observation_final = torch.zeros(1, 3, 224, 224)
         return observation_initial, action_vec, observation_final
         
@@ -163,7 +170,7 @@ class GenerateData():
         obs_initial = []
         actions = []
         obs_final = []
-        for i in range(num_episodes):
+        for _ in range(num_episodes):
             observation_initial, action_vec, observation_final = self.run_episode()
             obs_initial.append(observation_initial)
             actions.append(action_vec)
@@ -173,7 +180,7 @@ class GenerateData():
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='configs/sim.yaml')
+    parser.add_argument('--config', type=str, default='config/config.yaml')
     args = parser.parse_args()
     cfg = YamlConfig(args.config)
 
@@ -181,7 +188,3 @@ if __name__=='__main__':
     obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'])
 
     # TODO: Save the data in a torch.pth file
-
-
-        
-
