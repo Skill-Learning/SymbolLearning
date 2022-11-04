@@ -19,8 +19,6 @@ import torch
 # TODO: utils.py -> Observation Collection Class -> this collects pcd or image 
 # TODO: utils.py -> loggin class 
 
-np.random.seed(100)
-
 def vis_cam_images(image_list):
     for i in range(0, len(image_list)):
         plt.figure()
@@ -127,44 +125,44 @@ class GenerateData():
             self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
 
         actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        action = actions[-1]
+        action = actions[np.random.randint(0, len(actions))]
         # TODO: Create a new policy class for an ensemble of policies and the function selects the policy depending 
         # TODO: on the action selected from the draw
         if action == 'PokeX':
             policy = PokeXPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([1, 0, 0, 0, 0])
+            action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
         elif action == 'PokeY':
             policy = PokeYPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 1, 0, 0, 0])
+            action_vec = torch.tensor([0, 1, 0, 0, 0, 0])
         elif action == 'GraspTop':
             policy = GraspTopPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 1, 0, 0])
+            action_vec = torch.tensor([0, 0, 1, 0, 0, 0])
         elif action == 'GraspFront':
             policy = GraspFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 0, 1, 0])
+            action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
         elif action == 'GraspSide':
             policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 0, 0, 1])
+            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         elif action == 'Testing':
+            '''This is just a random condition to test the environment, move to the hardcoded position'''
             ee_pose = self.franka.get_ee_transform(0, 'franka')
-            pose = gymapi.Transform(p = gymapi.Vec3(0.5, 0.5, 0.5), r = ee_pose.r)
+            pose = gymapi.Transform(p = gymapi.Vec3(0.4, 0.4, 0.5), r = ee_pose.r)
             policy = GraspPointPolicy(self.franka, self.franka_name, pose)
-            action_vec = torch.tensor([0, 0, 0, 0, 0])
+            action_vec = torch.tensor([0, 0, 0, 0, 0, 1])
         else:
             raise ValueError(f"Invalid action {action}")
         
-        # ! This is temporary, we will have to sample the policy from the ensemble of policies
-        # policy = GraspBlockPolicy(self.franka, self.franka_name, self.block, self.block_name)
-        # action_vec = torch.tensor([0, 0, 0, 0, 1])
-        # policy.reset()
         # Collect Object data 
         # TODO: Collect object data 
         # TODO: This image/ pcd also need to have 2 extra channels for positional encoding 
         # ! need to find a smarter way to encode position, like transformers do
+
+        # TODO: Collect scene before running policy
         observation_initial = torch.zeros(1, 3, 224, 224)
+        policy.reset()
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
-        print('after action')
-        # TODO: Collect data after the action 
+
+        # TODO: Collect scene after running policy
         observation_final = torch.zeros(1, 3, 224, 224)
         return observation_initial, action_vec, observation_final
         
@@ -173,7 +171,6 @@ class GenerateData():
         actions = []
         obs_final = []
         for _ in range(num_episodes):
-            print('running')
             observation_initial, action_vec, observation_final = self.run_episode()
             obs_initial.append(observation_initial)
             actions.append(action_vec)
@@ -191,7 +188,3 @@ if __name__=='__main__':
     obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'])
 
     # TODO: Save the data in a torch.pth file
-
-
-        
-
