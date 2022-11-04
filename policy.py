@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from isaacgym import gymapi
-from .math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
+from math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
                     project_to_line, compute_task_space_impedance_control
 
 
@@ -256,25 +256,25 @@ class EEImpedanceWaypointPolicy(Policy):
         self._franka.apply_torque(env_idx, self._franka_name, tau)
 
 # TODO: Write a base class for Poke and Grasp policies
-class PokePolicy(Policy):
-    raise NotImplementedError
+# class PokePolicy(Policy):
+#     raise NotImplementedError
 
-class GraspPolicy(Policy):
-    raise NotImplementedError
+# class GraspPolicy(Policy):
+#     raise NotImplementedError
 
-# TODO: Write PokeX, PokeY, Grasp (Front, Side, Top) policies
-class PokeXPolicy(PokePolicy):
-    raise NotImplementedError
+# # TODO: Write PokeX, PokeY, Grasp (Front, Side, Top) policies
+# class PokeXPolicy(PokePolicy):
+#     raise NotImplementedError
 
-class PokeYPolicy(PokePolicy):
-    raise NotImplementedError
+# class PokeYPolicy(PokePolicy):
+#     raise NotImplementedError
 
-class GraspFrontPolicy(GraspPolicy):
-    raise NotImplementedError
+# class GraspFrontPolicy(GraspPolicy):
+#     raise NotImplementedError
 
-class GraspSidePolicy(GraspPolicy):
-    raise NotImplementedError
+# class GraspSidePolicy(GraspPolicy):
+#     raise NotImplementedError
 
-class GraspTopPolicy(GraspPolicy):
-    raise NotImplementedError
+# class GraspTopPolicy(GraspPolicy):
+#     raise NotImplementedError
     
