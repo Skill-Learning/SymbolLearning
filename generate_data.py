@@ -147,8 +147,9 @@ class GenerateData():
             action_vec = torch.tensor([0, 0, 0, 0, 1])
         elif action == 'Testing':
             ee_pose = self.franka.get_ee_transform(0, 'franka')
-            pose = gymapi.Transform(p = gymapi.Vec3(1, 1, 1), r = ee_pose.r)
+            pose = gymapi.Transform(p = gymapi.Vec3(0.5, 0.5, 0.5), r = ee_pose.r)
             policy = GraspPointPolicy(self.franka, self.franka_name, pose)
+            action_vec = torch.tensor([0, 0, 0, 0, 0])
         else:
             raise ValueError(f"Invalid action {action}")
         
@@ -162,7 +163,7 @@ class GenerateData():
         # ! need to find a smarter way to encode position, like transformers do
         observation_initial = torch.zeros(1, 3, 224, 224)
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
-
+        print('after action')
         # TODO: Collect data after the action 
         observation_final = torch.zeros(1, 3, 224, 224)
         return observation_initial, action_vec, observation_final
