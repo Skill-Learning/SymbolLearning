@@ -40,7 +40,6 @@ class GenerateData():
     def __init__(self, cfg):
     # Create Environment 
         self.scene = GymScene(cfg['scene'])
-        # import pdb; pdb.set_trace()
         self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode = 'attractors')
         self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
         # TODO: Sample block sizes from a distribution later
@@ -123,7 +122,8 @@ class GenerateData():
         for env_idx in self.scene.env_idxs:
             self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
 
-        actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
+        # actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
+        actions = ['Testing']
         action = actions[np.random.randint(0, len(actions))]
         # TODO: Create a new policy class for an ensemble of policies and the function selects the policy depending 
         # TODO: on the action selected from the draw
@@ -156,12 +156,12 @@ class GenerateData():
         # TODO: This image/ pcd also need to have 2 extra channels for positional encoding 
         # ! need to find a smarter way to encode position, like transformers do
 
-        # TODO: Collect scene before running policy
+        # TODO(mj): Collect scene before running policy
         observation_initial = torch.zeros(1, 3, 224, 224)
         policy.reset()
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
 
-        # TODO: Collect scene after running policy
+        # TODO(mj): Collect scene after running policy
         observation_final = torch.zeros(1, 3, 224, 224)
         return observation_initial, action_vec, observation_final
         
@@ -174,6 +174,7 @@ class GenerateData():
             obs_initial.append(observation_initial)
             actions.append(action_vec)
             obs_final.append(observation_final)
+            print(observation_initial.shape)
         return obs_initial, actions, obs_final
 
 
@@ -184,6 +185,8 @@ if __name__=='__main__':
     cfg = YamlConfig(args.config)
 
     data_generater = GenerateData(cfg)
+    # import pdb; pdb.set_trace()
+
     obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'])
 
     # TODO: Save the data in a torch.pth file
