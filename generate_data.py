@@ -39,9 +39,8 @@ def subsample(pts, rate):
 class GenerateData():
     def __init__(self, cfg):
     # Create Environment 
-        from pdb import set_trace
-        # set_trace()
         self.scene = GymScene(cfg['scene'])
+        # import pdb; pdb.set_trace()
         self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode = 'attractors')
         self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
         # TODO: Sample block sizes from a distribution later
