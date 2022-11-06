@@ -274,15 +274,15 @@ class PokePolicy(Policy):
         self._poke_final_transforms = []
 
     @abstractmethod
-    def _get_poke_transform(self, block_transform, env_idx):
+    def _get_poke_transform(self, block_transform):
         raise NotImplementedError
 
     @abstractmethod
-    def _get_pre_poke_transform(self, poke_transform, env_idx):
+    def _get_pre_poke_transform(self, poke_transform):
         raise NotImplementedError
 
     @abstractmethod
-    def _get_poke_final_transform(self, poke_transform, env_idx):
+    def _get_poke_final_transform(self, poke_transform):
         raise NotImplementedError
 
     def __call__(self, scene, env_idx, t_step, t_sim):
@@ -296,10 +296,10 @@ class PokePolicy(Policy):
         
         if t_step==20:
             block_transform = self._block.get_rb_transform(env_idx, self._block_name)[0]
-            poke_transform = self._get_poke_transform(block_transform, env_idx)
+            poke_transform = self._get_poke_transform(block_transform)
             self._poke_transforms.append(poke_transform)
-            self._pre_poke_transforms.append(self._get_pre_poke_transform(poke_transform, env_idx))
-            self._poke_final_transforms.append(self._get_poke_final_transform(poke_transform, env_idx))
+            self._pre_poke_transforms.append(self._get_pre_poke_transform(poke_transform))
+            self._poke_final_transforms.append(self._get_poke_final_transform(poke_transform))
 
             self._ee_waypoint_policies[env_idx]= EEImpedanceWaypointPolicy(
                 self._franka, self._franka_name, ee_transform, self._pre_poke_transforms[env_idx], T=180 
@@ -349,11 +349,11 @@ class GraspPolicy(Policy):
         self._ee_waypoint_policies = []
 
     @abstractmethod
-    def _get_grasp_transform(self, env_idx, block_transform):
+    def _get_grasp_transform(self, block_transform):
         raise NotImplementedError
 
     @abstractmethod
-    def _get_pre_grasp_transform(self, env_idx, grasp_transform):
+    def _get_pre_grasp_transform(self, grasp_transform):
         raise NotImplementedError        
 
     def __call__(self, scene, env_idx, t_step, t_sim):
@@ -367,11 +367,10 @@ class GraspPolicy(Policy):
 
         if t_step == 20:
             block_transform = self._block.get_rb_transforms(env_idx, self._block_name)[0]
-            grasp_transform = self._get_grasp_transform(env_idx, block_transform)
-            # pre_grasp_transfrom = gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.2), r=grasp_transform.r)
+            grasp_transform = self._get_grasp_transform(block_transform)
 
             self._grasp_transforms.append(grasp_transform)
-            self._pre_grasp_transforms.append(self._get_pre_grasp_transform(env_idx, grasp_transform))
+            self._pre_grasp_transforms.append(self._get_pre_grasp_transform(grasp_transform))
 
             self._ee_waypoint_policies[env_idx] = \
                 EEImpedanceWaypointPolicy(
@@ -431,5 +430,8 @@ class GraspPolicy(Policy):
 #     raise NotImplementedError
 
 class GraspTopPolicy(GraspPolicy):
-    raise NotImplementedError
-    
+    def _get_grasp_transform(self, block_transform):
+        return gymapi.Transform(p=block_transform.p, r=block_transform.r)
+
+    def _get_pre_grasp_transform(self,  grasp_transform):
+        return gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.2), r=grasp_transform.r)    
