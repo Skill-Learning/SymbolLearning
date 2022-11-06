@@ -13,7 +13,7 @@ from policy import GraspPointPolicy
 from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
 
 from visualization.visualizer3d import Visualizer3D as vis3d
-import torch 
+import torch
 
 # TODO: Policy Class 
 # TODO: utils.py -> Observation Collection Class -> this collects pcd or image 
@@ -38,6 +38,8 @@ def subsample(pts, rate):
 
 class GenerateData():
     def __init__(self, cfg):
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
     # Create Environment 
         self.scene = GymScene(cfg['scene'])
         self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode = 'attractors')
@@ -65,7 +67,7 @@ class GenerateData():
                         [0, 0, -1],
                         [1, 0, 0],
                         [0, -1, 0]
-                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-45))
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
             )),
             # left
             RigidTransform_to_transform(
@@ -75,7 +77,7 @@ class GenerateData():
                         [1, 0, 0],
                         [0, 0, 1],
                         [0, -1, 0]
-                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-45))
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
             )),
             # right
             RigidTransform_to_transform(
@@ -85,7 +87,7 @@ class GenerateData():
                         [-1, 0, 0],
                         [0, 0, -1],
                         [0, -1, 0]
-                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-45))
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
             ))
         ]
         assert len(self.camera_transforms) == cfg['num_cameras'], "Number of camera transforms must match number of cameras"
@@ -157,12 +159,24 @@ class GenerateData():
         # ! need to find a smarter way to encode position, like transformers do
 
         # TODO(mj): Collect scene before running policy
-        observation_initial = torch.zeros(1, 3, 224, 224)
+        # observation_initial = torch.zeros(1, 3, 224, 224)
+        obs_init_img = self.camera.frames(0, self.camera_names[1], True, False, False, False)['color'].raw_data
+        observation_initial = torch.from_numpy(obs_init_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
+        # print(observation_initial.data)
+        # import pdb; pdb.set_trace()
+        # imgplot = plt.imshow(observation_initial)
+        # plt.show()
         policy.reset()
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
 
         # TODO(mj): Collect scene after running policy
-        observation_final = torch.zeros(1, 3, 224, 224)
+        # observation_final = torch.zeros(1, 3, 224, 224)
+        obs_final_img = self.camera.frames(0, self.camera_names[1], True, False, False, False)['color'].raw_data
+        observation_final = torch.from_numpy(obs_final_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
+        # print(observation_final.raw_data)
+        # import pdb; pdb.set_trace()
+        # imgplot = plt.imshow(observation_final)
+        # plt.show()
         return observation_initial, action_vec, observation_final
         
     def generate_data(self, num_episodes):
@@ -172,9 +186,10 @@ class GenerateData():
         for _ in range(num_episodes):
             observation_initial, action_vec, observation_final = self.run_episode()
             obs_initial.append(observation_initial)
+            print(observation_initial.shape)
             actions.append(action_vec)
             obs_final.append(observation_final)
-            print(observation_initial.shape)
+            print(observation_final.shape)
         return obs_initial, actions, obs_final
 
 
