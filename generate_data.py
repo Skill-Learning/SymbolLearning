@@ -9,7 +9,7 @@ from isaacgym_utils.scene import GymScene
 from isaacgym_utils.assets import GymFranka, GymBoxAsset
 from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
-from policy import GraspPointPolicy
+from policy import GraspFrontPolicy, GraspTopPolicy, PokeFrontPolicy, PokeSidePolicy, GraspBlockPolicy
 from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
 
 from visualization.visualizer3d import Visualizer3D as vis3d
@@ -42,7 +42,7 @@ class GenerateData():
 
     # Create Environment 
         self.scene = GymScene(cfg['scene'])
-        self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode = 'attractors')
+        self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode='torques')
         self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
         # TODO: Sample block sizes from a distribution later
         # TODO: Add more shapes to sample from in the train function 
@@ -95,7 +95,7 @@ class GenerateData():
         def setup(scene, _):
             self.scene.add_asset('table', self.table, self.table_transform)
             self.scene.add_asset('franka', self.franka, self.franka_transform, collision_filter = 1)
-            self.scene.add_asset('block', self.block, gymapi.Transform(), collision_filter = 1)
+            self.scene.add_asset('block', self.block, gymapi.Transform())
             for i in range(cfg['num_cameras']):
                 self.scene.add_standalone_camera(self.camera_names[i], self.camera, self.camera_transforms[i])
             
@@ -114,6 +114,36 @@ class GenerateData():
 
     def run_episode(self):
         # sample block poses
+
+        # actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
+        actions = ['Testing']
+        action = actions[np.random.randint(0, len(actions))]
+        # TODO: Create a new policy class for an ensemble of policies and the function selects the policy depending 
+        # TODO: on the action selected from the draw
+        if action == 'PokeX':
+            policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
+            action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
+        elif action == 'PokeY':
+            policy = PokeSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
+            action_vec = torch.tensor([0, 1, 0, 0, 0, 0])
+        elif action == 'GraspTop':
+            policy = GraspTopPolicy(self.franka, self.franka_name, self.block, self.block_name)
+            action_vec = torch.tensor([0, 0, 1, 0, 0, 0])
+        elif action == 'GraspFront':
+            policy = GraspFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
+            action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
+        # elif action == 'GraspSide':
+        #     policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
+        #     action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
+        elif action == 'Testing':
+            '''This is just a random condition to test the environment, move to the hardcoded position'''
+            ee_pose = self.franka.get_ee_transform(0, 'franka')
+            # pose = gymapi.Transform(p = gymapi.Vec3(0.4, 0.4, 0.5), r = ee_pose.r)
+            policy = GraspTopPolicy(self.franka, self.franka_name, self.block, self.block_name)
+            action_vec = torch.tensor([0, 0, 0, 0, 0, 1])
+        else:
+            raise ValueError(f"Invalid action {action}")
+
         block_transforms = [gymapi.Transform(p=gymapi.Vec3(
             (np.random.rand()*2 - 1) * 0.1 + 0.5, 
             (np.random.rand()*2 - 1) * 0.2,
@@ -124,34 +154,6 @@ class GenerateData():
         for env_idx in self.scene.env_idxs:
             self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
 
-        # actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        actions = ['Testing']
-        action = actions[np.random.randint(0, len(actions))]
-        # TODO: Create a new policy class for an ensemble of policies and the function selects the policy depending 
-        # TODO: on the action selected from the draw
-        if action == 'PokeX':
-            policy = PokeXPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
-        elif action == 'PokeY':
-            policy = PokeYPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 1, 0, 0, 0, 0])
-        elif action == 'GraspTop':
-            policy = GraspTopPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 1, 0, 0, 0])
-        elif action == 'GraspFront':
-            policy = GraspFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
-        elif action == 'GraspSide':
-            policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
-        elif action == 'Testing':
-            '''This is just a random condition to test the environment, move to the hardcoded position'''
-            ee_pose = self.franka.get_ee_transform(0, 'franka')
-            pose = gymapi.Transform(p = gymapi.Vec3(0.4, 0.4, 0.5), r = ee_pose.r)
-            policy = GraspPointPolicy(self.franka, self.franka_name, pose)
-            action_vec = torch.tensor([0, 0, 0, 0, 0, 1])
-        else:
-            raise ValueError(f"Invalid action {action}")
         
         # Collect Object data 
         # TODO: Collect object data 
@@ -160,15 +162,15 @@ class GenerateData():
 
         # TODO(mj): Collect scene before running policy
         # observation_initial = torch.zeros(1, 3, 224, 224)
+        # import ipdb; ipdb.set_trace()
         obs_init_img = self.camera.frames(0, self.camera_names[1], True, False, False, False)['color'].raw_data
         observation_initial = torch.from_numpy(obs_init_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
         # print(observation_initial.data)
-        # import pdb; pdb.set_trace()
         # imgplot = plt.imshow(observation_initial)
         # plt.show()
         policy.reset()
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
-
+        
         # TODO(mj): Collect scene after running policy
         # observation_final = torch.zeros(1, 3, 224, 224)
         obs_final_img = self.camera.frames(0, self.camera_names[1], True, False, False, False)['color'].raw_data

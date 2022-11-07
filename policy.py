@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from autolab_core import RigidTransform
 from isaacgym import gymapi
-from .math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
+from math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
                     project_to_line, compute_task_space_impedance_control, transform_to_RigidTransform,\
                         RigidTransform_to_transform
 
@@ -450,7 +450,7 @@ class GraspFrontPolicy(GraspPolicy):
 
 class GraspTopPolicy(GraspPolicy):
     def _get_grasp_transform(self, env_idx, block_transform):
-        return gymapi.Transform(p=block_transform.p , r=self._init_ee_transforms[env_idx].r)
+        return gymapi.Transform(p=block_transform.p, r=self._init_ee_transforms[env_idx].r)
 
     def _get_pre_grasp_transform(self, env_idx, grasp_transform):
         return gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.2), r=grasp_transform.r)    
