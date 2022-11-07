@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
 import numpy as np
-
+from autolab_core import RigidTransform
 from isaacgym import gymapi
 from .math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
-                    project_to_line, compute_task_space_impedance_control
+                    project_to_line, compute_task_space_impedance_control, transform_to_RigidTransform,\
+                        RigidTransform_to_transform
+
+
 
 
 class Policy(ABC):
@@ -263,7 +266,7 @@ class PokePolicy(Policy):
         self._franka_name = franka_name
         self._block = block
         self._block_name = block_name
-        self._time_horizon = 800 
+        self._time_horizon = 600 
         self.reset()
 
     def reset(self):
@@ -273,9 +276,6 @@ class PokePolicy(Policy):
         self._ee_waypoint_policies = []
         self._poke_final_transforms = []
 
-    @abstractmethod
-    def _get_poke_transform(self, block_transform, env_idx):
-        raise NotImplementedError
 
     @abstractmethod
     def _get_pre_poke_transform(self, poke_transform, env_idx):
@@ -290,12 +290,12 @@ class PokePolicy(Policy):
 
         if t_step ==0:
             self._init_ee_transforms.append(ee_transform)
-            self.__ee_waypoint_policies.append(
+            self._ee_waypoint_policies.append(
                 EEImpedanceWaypointPolicy(self._franka, self._franka_name, ee_transform, ee_transform, T=20)
             )
         
         if t_step==20:
-            block_transform = self._block.get_rb_transform(env_idx, self._block_name)[0]
+            block_transform = self._block.get_rb_transforms(env_idx, self._block_name)[0]
             poke_transform = self._get_poke_transform(block_transform, env_idx)
             self._poke_transforms.append(poke_transform)
             self._pre_poke_transforms.append(self._get_pre_poke_transform(poke_transform, env_idx))
@@ -304,28 +304,19 @@ class PokePolicy(Policy):
             self._ee_waypoint_policies[env_idx]= EEImpedanceWaypointPolicy(
                 self._franka, self._franka_name, ee_transform, self._pre_poke_transforms[env_idx], T=180 
             )
+            self._franka.close_grippers(env_idx, self._franka_name)
         
         if t_step==200:
             self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, self._pre_poke_transforms[env_idx], self._poke_transforms[env_idx], T=100
-            )
+                self._franka, self._franka_name, self._pre_poke_transforms[env_idx], self._poke_final_transforms[env_idx], T=150
+            )          
         
-        if t_step==300:
+        if t_step==350:
             self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, self._poke_transforms[env_idx], self._poke_final_transforms[env_idx], T=100
+                self._franka, self._franka_name, self._poke_final_transforms[env_idx], self._pre_poke_transforms[env_idx], T=150
             )
-
-        if t_step==400:
-            self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, self._poke_final_transforms[env_idx], self._poke_transforms[env_idx], T=100
-            )            
         
         if t_step==500:
-            self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, self._poke_transforms[env_idx], self._pre_poke_transforms[env_idx], T=100
-            )
-        
-        if t_step==600:
             self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
                 self._franka, self._franka_name, self._pre_poke_transforms[env_idx], self._init_ee_transforms[env_idx], T=100
             )
@@ -339,7 +330,7 @@ class GraspPolicy(Policy):
         self._franka_name = franka_name
         self._block = block
         self._block_name = block_name
-        self._time_horizon = 1000
+        self._time_horizon = 1500
         self.reset()
 
     def reset(self):
@@ -375,57 +366,84 @@ class GraspPolicy(Policy):
 
             self._ee_waypoint_policies[env_idx] = \
                 EEImpedanceWaypointPolicy(
-                    self._franka, self._franka_name, ee_transform, self._pre_grasp_transforms[env_idx], T=180
-                )
-
-        if t_step == 200:
-            self._ee_waypoint_policies[env_idx] = \
-                EEImpedanceWaypointPolicy(
-                    self._franka, self._franka_name, self._pre_grasp_transforms[env_idx], self._grasp_transforms[env_idx], T=100
+                    self._franka, self._franka_name, ee_transform, self._pre_grasp_transforms[env_idx], T=280
                 )
 
         if t_step == 300:
-            self._franka.close_grippers(env_idx, self._franka_name)
-        
-        if t_step == 400:
             self._ee_waypoint_policies[env_idx] = \
                 EEImpedanceWaypointPolicy(
-                    self._franka, self._franka_name, self._grasp_transforms[env_idx], self._pre_grasp_transforms[env_idx], T=100
+                    self._franka, self._franka_name, self._pre_grasp_transforms[env_idx], self._grasp_transforms[env_idx], T=200
                 )
 
         if t_step == 500:
-            self._ee_waypoint_policies[env_idx] = \
-                EEImpedanceWaypointPolicy(
-                    self._franka, self._franka_name, self._pre_grasp_transforms[env_idx], self._grasp_transforms[env_idx], T=100
-                )
-
+            self._franka.close_grippers(env_idx, self._franka_name)
+        
         if t_step == 600:
-            self._franka.open_grippers(env_idx, self._franka_name)
-
-        if t_step == 700:
             self._ee_waypoint_policies[env_idx] = \
                 EEImpedanceWaypointPolicy(
-                    self._franka, self._franka_name, self._grasp_transforms[env_idx], self._pre_grasp_transforms[env_idx], T=100
+                    self._franka, self._franka_name, self._grasp_transforms[env_idx], self._pre_grasp_transforms[env_idx], T=200
                 )
 
         if t_step == 800:
             self._ee_waypoint_policies[env_idx] = \
                 EEImpedanceWaypointPolicy(
-                    self._franka, self._franka_name, self._pre_grasp_transforms[env_idx], self._init_ee_transforms[env_idx], T=100
+                    self._franka, self._franka_name, self._pre_grasp_transforms[env_idx], self._grasp_transforms[env_idx], T=200
+                )
+
+        if t_step == 1000:
+            self._franka.open_grippers(env_idx, self._franka_name)
+
+        if t_step == 1100:
+            self._ee_waypoint_policies[env_idx] = \
+                EEImpedanceWaypointPolicy(
+                    self._franka, self._franka_name, self._grasp_transforms[env_idx], self._pre_grasp_transforms[env_idx], T=200
+                )
+
+        if t_step == 1400:
+            self._ee_waypoint_policies[env_idx] = \
+                EEImpedanceWaypointPolicy(
+                    self._franka, self._franka_name, self._pre_grasp_transforms[env_idx], self._init_ee_transforms[env_idx], T=300
                 )
 
         self._ee_waypoint_policies[env_idx](scene, env_idx, t_step, t_sim)
     
 
 # # TODO: Write PokeX, PokeY, Grasp (Front, Side, Top) policies
-# class PokeXPolicy(PokePolicy):
-#     raise NotImplementedError
+class PokeFrontPolicy(PokePolicy):
+    def _get_poke_transform(self, block_transform, env_idx):
+        return gymapi.Transform(p=block_transform.p, r=self._init_ee_transforms[env_idx].r)
 
-# class PokeYPolicy(PokePolicy):
-#     raise NotImplementedError
+    def _get_pre_poke_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.1, 0, 0), r=poke_transform.r)
+    
+    def _get_poke_final_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.1, 0, 0), r=poke_transform.r)
 
-# class GraspFrontPolicy(GraspPolicy):
-#     raise NotImplementedError
+
+class PokeSidePolicy(PokePolicy):
+    def _get_poke_transform(self, block_transform, env_idx):
+        return gymapi.Transform(p=block_transform.p, r=self._init_ee_transforms[env_idx].r)
+
+    def _get_pre_poke_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, -0.1, 0), r=poke_transform.r)
+    
+    def _get_poke_final_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, 0.1, 0), r=poke_transform.r)
+
+
+class GraspFrontPolicy(GraspPolicy):
+    def _get_grasp_transform(self, env_idx, block_transform):
+        # TODO - MS: This is a bit buggy, it is not always possible to easily reach the required transform 
+        rotated_transform = RigidTransform_to_transform(
+
+            RigidTransform(
+                translation = transform_to_RigidTransform(block_transform).translation,
+                rotation = transform_to_RigidTransform(block_transform).rotation 
+                @ RigidTransform.y_axis_rotation(np.pi/2) @ RigidTransform.z_axis_rotation(np.pi)
+        ))
+        return rotated_transform
+    def _get_pre_grasp_transform(self, env_idx, grasp_transform):
+        return gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.2), r=grasp_transform.r)    
 
 # class GraspSidePolicy(GraspPolicy):
 #     raise NotImplementedError
