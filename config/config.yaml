@@ -76,3 +76,9 @@ camera:
 # Specific to L4ML Project
 num_cameras: 3
 num_episodes: 100
+
+
+image_encoder:
+  type: resnet18
+  pretrained: True
+  

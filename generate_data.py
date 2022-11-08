@@ -162,8 +162,8 @@ class GenerateData():
 
         # TODO(mj): Collect scene before running policy
         # observation_initial = torch.zeros(1, 3, 224, 224)
-        # import ipdb; ipdb.set_trace()
-        obs_init_img = self.camera.frames(0, self.camera_names[1], True, False, False, False)['color'].raw_data
+        import ipdb; ipdb.set_trace()
+        obs_init_img = self.camera.frames(0, self.camera_names[0], True, False, False, False)['color'].raw_data
         observation_initial = torch.from_numpy(obs_init_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
         # print(observation_initial.data)
         # imgplot = plt.imshow(observation_initial)
