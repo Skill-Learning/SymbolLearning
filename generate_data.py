@@ -91,15 +91,15 @@ class GenerateData():
             ))
         ]
         assert len(self.camera_transforms) == cfg['num_cameras'], "Number of camera transforms must match number of cameras"
-        scene = self.scene
         def setup(scene, _):
             self.scene.add_asset('table', self.table, self.table_transform)
             self.scene.add_asset('franka', self.franka, self.franka_transform, collision_filter = 1)
             self.scene.add_asset('block', self.block, gymapi.Transform())
             for i in range(cfg['num_cameras']):
                 self.scene.add_standalone_camera(self.camera_names[i], self.camera, self.camera_transforms[i])
-            
+
         self.scene.setup_all_envs(setup)
+        self.scene.render_cameras()
 
         # for drawing stuff in the scene
     def custom_draws(self,scene):
@@ -177,7 +177,7 @@ class GenerateData():
         observation_final = torch.from_numpy(obs_final_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
         # print(observation_final.raw_data)
         # import pdb; pdb.set_trace()
-        # imgplot = plt.imshow(observation_final)
+        # imgplot = plt.imshow(obs_final_img)
         # plt.show()
         return observation_initial, action_vec, observation_final
         
@@ -202,7 +202,6 @@ if __name__=='__main__':
     cfg = YamlConfig(args.config)
 
     data_generater = GenerateData(cfg)
-    # import pdb; pdb.set_trace()
 
     obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'])
 
