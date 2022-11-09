@@ -78,7 +78,21 @@ num_cameras: 3
 num_episodes: 100
 
 
+# ______________________________________________________________________________
+# Learning Parameters
+
+device: cuda:0
+
 image_encoder:
   type: resnet18
   pretrained: True
+  
+
+coarse_training:
+  batch_size:
+    train: 32
+    val: 32
+  epochs: 100
+  lr: 0.001
+
   
