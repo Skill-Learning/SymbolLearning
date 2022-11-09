@@ -1,8 +1,9 @@
 import torch 
+import torchvision
 import numpy as np 
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset
-
+from datetime import datetime
 
 def init_weights_and_freeze(model_tgt, model_src, freeze_layers = []):
     '''
@@ -29,4 +30,29 @@ def train_val_split(dataset, val_split=0.2):
     dataset['val'] = Subset(dataset, val_idx)
     return dataset
 
+def make_data_row(episode_num, action_vector, 
+                    init_pose, init_img, final_pose, final_img, obj_type="std_cube"):
+    '''
+        make a row of data for training
+    '''
+    row = []
+    timestamp = datetime.now().strftime("%d/%m/%Y_%H:%M:%S")
+    row.append(timestamp)
+    row.append(episode_num)
+    row.append(obj_type)
+    action_str = ""
+    for i in range(len(action_vector)):
+        action_str += str(action_vector[i])
+    row.append(action_str)
+    assert len(init_pose) == 7
+    assert len(final_pose) == 7
+    row.append(init_pose)
+    row.append(final_pose)
+    init_img_path = f"{episode_num}_init_image_{timestamp}.png"
+    torchvision.utils.save_image(init_img, init_img_path)
+    row.append(init_img_path)
+    final_img_path = f"{episode_num}_final_image_{timestamp}.png"
+    torchvision.utils.save_image(final_img, final_img_path)
+    row.append(final_img_path)
+    return row
 

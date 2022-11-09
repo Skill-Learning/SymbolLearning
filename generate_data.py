@@ -3,7 +3,9 @@ import argparse
 import numpy as np
 from autolab_core import YamlConfig, RigidTransform
 import matplotlib.pyplot as plt
-
+from datetime import datetime
+import os
+import csv
 from isaacgym import gymapi
 from isaacgym_utils.scene import GymScene
 from isaacgym_utils.assets import GymFranka, GymBoxAsset
@@ -14,6 +16,7 @@ from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
 
 from visualization.visualizer3d import Visualizer3D as vis3d
 import torch
+from utils import *
 
 # TODO: Policy Class 
 # TODO: utils.py -> Observation Collection Class -> this collects pcd or image 
@@ -155,12 +158,13 @@ class GenerateData():
             self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
 
         
+        # ! Note_MS: need image tensors as torch tensors 
         # Collect Object data 
-        # TODO: Collect object data 
-        # TODO: This image/ pcd also need to have 2 extra channels for positional encoding 
-        # ! need to find a smarter way to encode position, like transformers do
+        # TODO: Collect Poses 
 
         # TODO(mj): Collect scene before running policy
+
+
         # observation_initial = torch.zeros(1, 3, 224, 224)
         import ipdb; ipdb.set_trace()
         obs_init_img = self.camera.frames(0, self.camera_names[0], True, False, False, False)['color'].raw_data
@@ -175,23 +179,32 @@ class GenerateData():
         # observation_final = torch.zeros(1, 3, 224, 224)
         obs_final_img = self.camera.frames(0, self.camera_names[1], True, False, False, False)['color'].raw_data
         observation_final = torch.from_numpy(obs_final_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
+        # TODO: Collect final Poses 
+        
         # print(observation_final.raw_data)
         # import pdb; pdb.set_trace()
         # imgplot = plt.imshow(obs_final_img)
         # plt.show()
+        # TODO: return initial and final poses and imgs, and action vector
+        
         return observation_initial, action_vec, observation_final
         
-    def generate_data(self, num_episodes):
+    def generate_data(self, num_episodes, csv_path):
+
         obs_initial = []
         actions = []
         obs_final = []
-        for _ in range(num_episodes):
+        for i in range(num_episodes):
             observation_initial, action_vec, observation_final = self.run_episode()
-            obs_initial.append(observation_initial)
-            print(observation_initial.shape)
-            actions.append(action_vec)
-            obs_final.append(observation_final)
+            # !this is just for testing
+            pose = np.zeros(7)
+            row = make_data_row(i, action_vec, pose, pose, observation_initial, observation_final, obj_type="std_cube")
+            with open(csv_path, 'a') as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+            
             print(observation_final.shape)
+
         return obs_initial, actions, obs_final
 
 
@@ -200,9 +213,28 @@ if __name__=='__main__':
     parser.add_argument('--config', type=str, default='config/config.yaml')
     args = parser.parse_args()
     cfg = YamlConfig(args.config)
+    header = ['timestamp', 'episode', 'object_type', 'action_vector',
+            'initial_pose_position_x', 'initial_pose_position_y', 'initial_pose_position_z',
+            'initial_pose_orientation_x', 'initial_pose_orientation_y', 'initial_pose_orientation_z', 'initial_pose_orientation_w',
+            'final_pose_position_x', 'final_pose_position_y', 'final_pose_position_z',
+            'final_pose_orientation_x', 'final_pose_orientation_y', 'final_pose_orientation_z', 'final_pose_orientation_w',
+            'initial_image_path', 'final_image_path']
+
+
+    curr_date = datetime.now().strftime("%Y%m%d")
+    csv_path = f"data/{curr_date}/data.csv"
+    if(not os.path.exists(f"data/{curr_date}")):
+        try:
+            os.mkdir(f"data/{curr_date}")
+            with open(csv_path, 'w') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+            os.mkdir(f"data/{curr_date}/images")
+        except OSError:
+            print (f"Creation of the directory data/{curr_date} failed")
 
     data_generater = GenerateData(cfg)
 
-    obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'])
+    obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'], csv_path)
 
     # TODO: Save the data in a torch.pth file
