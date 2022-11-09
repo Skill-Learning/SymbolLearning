@@ -237,4 +237,3 @@ if __name__=='__main__':
 
     obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'], csv_path)
 
-    # TODO: Save the data in a torch.pth file
