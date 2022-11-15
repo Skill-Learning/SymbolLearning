@@ -1,0 +1,10 @@
+timestamp,episode,object_type,action_vector,initial_pose_position_x,initial_pose_position_y,initial_pose_position_z,initial_pose_orientation_x,initial_pose_orientation_y,initial_pose_orientation_z,initial_pose_orientation_w,final_pose_position_x,final_pose_position_y,final_pose_position_z,final_pose_orientation_x,final_pose_orientation_y,final_pose_orientation_z,final_pose_orientation_w,initial_image_path,final_image_path
+14112022_190147,0,std_cube,tensor(0)tensor(0)tensor(0)tensor(0)tensor(0)tensor(1),"tensor([[0.5059, 0.1563, 0.6250, 1.0000, 0.0000, 0.0000, 0.0000]],
+       dtype=torch.float64)","tensor([[ 5.0600e-01,  1.5640e-01,  5.2900e-01,  1.0000e+00, -2.3817e-07,
+          8.5943e-09,  1.6766e-03]], dtype=torch.float64)",/home/manpreet/sim_envs/isaacgym-utils/l4m_sim/SymbolLearning/data/20221114/images/0_init_image_14112022_190147.png,/home/manpreet/sim_envs/isaacgym-utils/l4m_sim/SymbolLearning/data/20221114/images/0_final_image_14112022_190147.png
+14112022_190204,0,std_cube,tensor(0)tensor(0)tensor(0)tensor(0)tensor(0)tensor(1),"tensor([[ 0.5476, -0.0037,  0.6250,  1.0000,  0.0000,  0.0000,  0.0000]],
+       dtype=torch.float64)","tensor([[ 5.4745e-01, -3.7399e-03,  5.2900e-01,  1.0000e+00,  1.0741e-07,
+         -6.2322e-08,  1.8036e-03]], dtype=torch.float64)",/home/manpreet/sim_envs/isaacgym-utils/l4m_sim/SymbolLearning/data/20221114/images/0_init_image_14112022_190204.png,/home/manpreet/sim_envs/isaacgym-utils/l4m_sim/SymbolLearning/data/20221114/images/0_final_image_14112022_190204.png
+14112022_190206,0,std_cube,tensor(0)tensor(0)tensor(0)tensor(0)tensor(0)tensor(1),"tensor([[0.5824, 0.0031, 0.6250, 1.0000, 0.0000, 0.0000, 0.0000]],
+       dtype=torch.float64)","tensor([[ 5.8273e-01,  3.1713e-03,  5.2900e-01,  1.0000e+00,  6.5763e-07,
+         -1.3805e-06,  1.3494e-03]], dtype=torch.float64)",/home/manpreet/sim_envs/isaacgym-utils/l4m_sim/SymbolLearning/data/20221114/images/0_init_image_14112022_190206.png,/home/manpreet/sim_envs/isaacgym-utils/l4m_sim/SymbolLearning/data/20221114/images/0_final_image_14112022_190206.png
