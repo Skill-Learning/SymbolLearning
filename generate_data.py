@@ -158,54 +158,44 @@ class GenerateData():
             self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
 
         
-        # ! Note_MS: need image tensors as torch tensors 
         # Collect Object data 
-        # TODO: Collect Poses 
+        
+        # * Pose: [p[x,y,z] r[x,y,z,w]]
 
-        # TODO(mj): Collect scene before running policy
+        initial_poses = []
+        initial_images = []
+        for env_idx in self.scene.env_idxs:
+            initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
+            img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
+            img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
+            initial_images.append(img)
 
+        initial_poses = torch.tensor(initial_poses)
 
-        # observation_initial = torch.zeros(1, 3, 224, 224)
-        import ipdb; ipdb.set_trace()
-        obs_init_img = self.camera.frames(0, self.camera_names[0], True, False, False, False)['color'].raw_data
-        observation_initial = torch.from_numpy(obs_init_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
-        # print(observation_initial.data)
-        # imgplot = plt.imshow(observation_initial)
-        # plt.show()
         policy.reset()
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
         
         # TODO(mj): Collect scene after running policy
-        # observation_final = torch.zeros(1, 3, 224, 224)
-        obs_final_img = self.camera.frames(0, self.camera_names[1], True, False, False, False)['color'].raw_data
-        observation_final = torch.from_numpy(obs_final_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
-        # TODO: Collect final Poses 
-        
-        # print(observation_final.raw_data)
-        # import pdb; pdb.set_trace()
-        # imgplot = plt.imshow(obs_final_img)
-        # plt.show()
-        # TODO: return initial and final poses and imgs, and action vector
-        
-        return observation_initial, action_vec, observation_final
-        
-    def generate_data(self, num_episodes, csv_path):
+        final_poses = []
+        final_images = []
+        for env_idx in self.scene.env_idxs:
+            final_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
+            img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
+            img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
+            final_images.append(img)
 
-        obs_initial = []
-        actions = []
-        obs_final = []
+        final_poses = torch.tensor(final_poses)
+        return initial_images, initial_poses, final_images, final_poses, action_vec
+        
+    def generate_data(self, num_episodes, csv_path, data_dir):
+
         for i in range(num_episodes):
-            observation_initial, action_vec, observation_final = self.run_episode()
-            # !this is just for testing
-            pose = np.zeros(7)
-            row = make_data_row(i, action_vec, pose, pose, observation_initial, observation_final, obj_type="std_cube")
-            with open(csv_path, 'a') as f:
-                writer = csv.writer(f)
-                writer.writerow(row)
-            
-            print(observation_final.shape)
-
-        return obs_initial, actions, obs_final
+            initial_images, initial_poses, final_images, final_poses, action_vec = self.run_episode()
+            for env_idx in self.scene.env_idxs:
+                row = make_data_row(i, action_vec, initial_poses[env_idx], initial_images[env_idx], final_poses[env_idx], final_images[env_idx], data_dir, obj_type="std_cube")
+                with open(csv_path, 'a') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(row)
 
 
 if __name__=='__main__':
@@ -223,6 +213,7 @@ if __name__=='__main__':
 
     curr_date = datetime.now().strftime("%Y%m%d")
     csv_path = f"data/{curr_date}/data.csv"
+    data_dir = os.getcwd() + f"/data/{curr_date}"
     if(not os.path.exists(f"data/{curr_date}")):
         try:
             os.mkdir(f"data/{curr_date}")
@@ -235,5 +226,5 @@ if __name__=='__main__':
 
     data_generater = GenerateData(cfg)
 
-    obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'], csv_path)
+    obs_initial, actions, obs_final = data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
 
