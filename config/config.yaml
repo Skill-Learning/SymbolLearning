@@ -87,7 +87,6 @@ image_encoder:
   type: resnet18
   pretrained: True
   
-
 coarse_training:
   batch_size:
     train: 32
