@@ -1,5 +1,5 @@
 scene:
-  n_envs: 10
+  n_envs: 25
   es: 1
   gui: 1
   cam:
@@ -73,7 +73,7 @@ camera:
   width: 320
   height: 240
 
-num_cameras: 3
+num_cameras: 1
 
 
 # ______________________________________________________________________________
@@ -95,4 +95,4 @@ coarse_training:
 data:
   use_saved_data: False
   filename: test
-  num_episodes: 1
+  num_episodes: 3

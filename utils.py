@@ -33,7 +33,7 @@ def train_val_split(dataset, val_split=0.2):
     return dataset
 
 def make_data_row(episode_num, action_vector, 
-                    init_pose, init_img, final_pose, final_img, data_dir, obj_type="std_cube"):
+                    init_pose, init_img, final_pose, final_img, data_dir, env_idx, obj_type="std_cube"):
     '''
         make a row of data for training
     '''
@@ -43,17 +43,20 @@ def make_data_row(episode_num, action_vector,
     row.append(episode_num)
     row.append(obj_type)
     action_str = ""
+    action_vector = action_vector.tolist()
     for i in range(len(action_vector)):
         action_str += str(action_vector[i])
     row.append(action_str)
     assert len(init_pose[0]) == 7
     assert len(final_pose[0]) == 7
-    row.append(init_pose)
-    row.append(final_pose)
-    init_img_path = f"{data_dir}/images/{episode_num}_init_image_{timestamp}.png"
+    for i in range(7):
+        row.append(init_pose[0][i].item())
+    for i in range(7):
+        row.append(final_pose[0][i].item())
+    init_img_path = f"{data_dir}/images/{episode_num}_{env_idx}_init_image_{timestamp}.png"
     torchvision.utils.save_image(init_img, init_img_path)
     row.append(init_img_path)
-    final_img_path = f"{data_dir}/images/{episode_num}_final_image_{timestamp}.png"
+    final_img_path = f"{data_dir}/images/{episode_num}_{env_idx}_final_image_{timestamp}.png"
     torchvision.utils.save_image(final_img, final_img_path)
     row.append(final_img_path)
     return row
