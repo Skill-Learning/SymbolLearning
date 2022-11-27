@@ -1,5 +1,5 @@
 scene:
-  n_envs: 1
+  n_envs: 25
   es: 1
   gui: 1
   cam:
@@ -73,9 +73,7 @@ camera:
   width: 320
   height: 240
 
-# Specific to L4ML Project
-num_cameras: 3
-num_episodes: 100
+num_cameras: 1
 
 
 # ______________________________________________________________________________
@@ -87,7 +85,6 @@ image_encoder:
   type: resnet18
   pretrained: True
   
-
 coarse_training:
   batch_size:
     train: 32
@@ -95,4 +92,7 @@ coarse_training:
   epochs: 100
   lr: 0.001
 
-  
+data:
+  use_saved_data: False
+  filename: test
+  num_episodes: 3

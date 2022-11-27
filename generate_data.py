@@ -1,9 +1,11 @@
 import argparse
-
+import gym
 import numpy as np
 from autolab_core import YamlConfig, RigidTransform
 import matplotlib.pyplot as plt
-
+from datetime import datetime
+import os
+import csv
 from isaacgym import gymapi
 from isaacgym_utils.scene import GymScene
 from isaacgym_utils.assets import GymFranka, GymBoxAsset
@@ -11,9 +13,10 @@ from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
 from policy import GraspFrontPolicy, GraspTopPolicy, PokeFrontPolicy, PokeSidePolicy, GraspBlockPolicy
 from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
-
+import time 
 from visualization.visualizer3d import Visualizer3D as vis3d
 import torch
+from utils import *
 
 # TODO: Policy Class 
 # TODO: utils.py -> Observation Collection Class -> this collects pcd or image 
@@ -46,7 +49,7 @@ class GenerateData():
         self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
         # TODO: Sample block sizes from a distribution later
         # TODO: Add more shapes to sample from in the train function 
-        self.block = GymBoxAsset(self.scene, **cfg['block']['dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'])
+        self.block = GymBoxAsset(self.scene, **cfg['block']['dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
 
         self.franka_name, self.table_name, self.block_name = 'franka', 'table', 'block'
 
@@ -69,26 +72,26 @@ class GenerateData():
                         [0, -1, 0]
                     ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
             )),
-            # left
-            RigidTransform_to_transform(
-                RigidTransform(
-                    translation=[0.5, -0.8, 1],
-                    rotation=np.array([
-                        [1, 0, 0],
-                        [0, 0, 1],
-                        [0, -1, 0]
-                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
-            )),
-            # right
-            RigidTransform_to_transform(
-                RigidTransform(
-                    translation=[0.5, 0.8, 1],
-                    rotation=np.array([
-                        [-1, 0, 0],
-                        [0, 0, -1],
-                        [0, -1, 0]
-                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
-            ))
+            # # left
+            # RigidTransform_to_transform(
+            #     RigidTransform(
+            #         translation=[0.5, -0.8, 1],
+            #         rotation=np.array([
+            #             [1, 0, 0],
+            #             [0, 0, 1],
+            #             [0, -1, 0]
+            #         ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
+            # )),
+            # # right
+            # RigidTransform_to_transform(
+            #     RigidTransform(
+            #         translation=[0.5, 0.8, 1],
+            #         rotation=np.array([
+            #             [-1, 0, 0],
+            #             [0, 0, -1],
+            #             [0, -1, 0]
+            #         ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
+            # ))
         ]
         assert len(self.camera_transforms) == cfg['num_cameras'], "Number of camera transforms must match number of cameras"
         def setup(scene, _):
@@ -116,10 +119,8 @@ class GenerateData():
         # sample block poses
 
         # actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        actions = ['Testing']
+        actions = ['PokeX']
         action = actions[np.random.randint(0, len(actions))]
-        # TODO: Create a new policy class for an ensemble of policies and the function selects the policy depending 
-        # TODO: on the action selected from the draw
         if action == 'PokeX':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
             action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
@@ -156,43 +157,43 @@ class GenerateData():
 
         
         # Collect Object data 
-        # TODO: Collect object data 
-        # TODO: This image/ pcd also need to have 2 extra channels for positional encoding 
-        # ! need to find a smarter way to encode position, like transformers do
+        
+        # * Pose: [p[x,y,z] r[x,y,z,w]]
 
-        # TODO(mj): Collect scene before running policy
-        # observation_initial = torch.zeros(1, 3, 224, 224)
-        import ipdb; ipdb.set_trace()
-        obs_init_img = self.camera.frames(0, self.camera_names[0], True, False, False, False)['color'].raw_data
-        observation_initial = torch.from_numpy(obs_init_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
-        # print(observation_initial.data)
-        # imgplot = plt.imshow(observation_initial)
-        # plt.show()
+        initial_poses = []
+        initial_images = []
         policy.reset()
+        for _ in range(100):
+            self.scene.step()
+        self.scene.render_cameras()
+        for env_idx in self.scene.env_idxs:
+            initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
+            img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
+            img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
+            initial_images.append(img)
+        initial_poses = torch.tensor(initial_poses)
+
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
         
-        # TODO(mj): Collect scene after running policy
-        # observation_final = torch.zeros(1, 3, 224, 224)
-        obs_final_img = self.camera.frames(0, self.camera_names[1], True, False, False, False)['color'].raw_data
-        observation_final = torch.from_numpy(obs_final_img).permute(2, 0, 1).unsqueeze(0).to(self.device)
-        # print(observation_final.raw_data)
-        # import pdb; pdb.set_trace()
-        # imgplot = plt.imshow(obs_final_img)
-        # plt.show()
-        return observation_initial, action_vec, observation_final
+        final_poses = []
+        final_images = []
+        self.scene.render_cameras()
+        for env_idx in self.scene.env_idxs:
+            final_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
+            img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
+            img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
+            final_images.append(img)
+        final_poses = torch.tensor(final_poses)
+        return initial_images, initial_poses, final_images, final_poses, action_vec
         
-    def generate_data(self, num_episodes):
-        obs_initial = []
-        actions = []
-        obs_final = []
-        for _ in range(num_episodes):
-            observation_initial, action_vec, observation_final = self.run_episode()
-            obs_initial.append(observation_initial)
-            print(observation_initial.shape)
-            actions.append(action_vec)
-            obs_final.append(observation_final)
-            print(observation_final.shape)
-        return obs_initial, actions, obs_final
+    def generate_data(self, num_episodes, csv_path, data_dir):
+        for i in range(num_episodes):
+            initial_images, initial_poses, final_images, final_poses, action_vec = self.run_episode()
+            for env_idx in self.scene.env_idxs:
+                row = make_data_row(i, action_vec, initial_poses[env_idx], initial_images[env_idx], final_poses[env_idx], final_images[env_idx], data_dir, env_idx, obj_type="std_cube")
+                with open(csv_path, 'a') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(row)
 
 
 if __name__=='__main__':
@@ -200,9 +201,28 @@ if __name__=='__main__':
     parser.add_argument('--config', type=str, default='config/config.yaml')
     args = parser.parse_args()
     cfg = YamlConfig(args.config)
+    header = ['timestamp', 'episode', 'object_type', 'action_vector',
+            'initial_pose_position_x', 'initial_pose_position_y', 'initial_pose_position_z',
+            'initial_pose_orientation_x', 'initial_pose_orientation_y', 'initial_pose_orientation_z', 'initial_pose_orientation_w',
+            'final_pose_position_x', 'final_pose_position_y', 'final_pose_position_z',
+            'final_pose_orientation_x', 'final_pose_orientation_y', 'final_pose_orientation_z', 'final_pose_orientation_w',
+            'initial_image_path', 'final_image_path']
+
+
+    curr_date = datetime.now().strftime("%Y%m%d")
+    csv_path = f"data/{curr_date}/data.csv"
+    data_dir = os.getcwd() + f"/data/{curr_date}"
+    if(not os.path.exists(f"data/{curr_date}")):
+        try:
+            os.mkdir(f"data/{curr_date}")
+            with open(csv_path, 'w') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+            os.mkdir(f"data/{curr_date}/images")
+        except OSError:
+            print (f"Creation of the directory data/{curr_date} failed")
 
     data_generater = GenerateData(cfg)
 
-    obs_initial, actions, obs_final = data_generater.generate_data(cfg['num_episodes'])
+    data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
 
-    # TODO: Save the data in a torch.pth file
