@@ -164,6 +164,7 @@ class GenerateData():
 
         initial_poses = []
         initial_images = []
+        self.scene.render_cameras()
         for env_idx in self.scene.env_idxs:
             initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
             img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
@@ -178,6 +179,7 @@ class GenerateData():
         # TODO(mj): Collect scene after running policy
         final_poses = []
         final_images = []
+        self.scene.render_cameras()
         for env_idx in self.scene.env_idxs:
             final_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
             img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
