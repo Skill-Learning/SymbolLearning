@@ -58,6 +58,20 @@ block:
     sx: 0.05
     sy: 0.05
     sz: 0.05
+  high_dims:
+    sx: 0.05
+    sy: 0.05
+    sz: 0.15
+  long_dims:
+    sx: 0.05
+    sy: 0.15
+    sz: 0.05
+  wide_dims:
+    sx: 0.15
+    sy: 0.05
+    sz: 0.05
+
+
   shape_props:
     friction: 0.2
     rolling_friction: 0.01

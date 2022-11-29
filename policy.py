@@ -431,6 +431,20 @@ class PokeSidePolicy(PokePolicy):
         return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, 0.1, 0), r=poke_transform.r)
 
 
+class TopplePolicy(PokePolicy):
+    def __init__(self, franka, franka_name, block, block_name, block_dims, *args, **kwargs):
+        super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
+        self._block_dims = block_dims
+    def _get_poke_transform(self, block_transform, env_idx):
+        return gymapi.Transform(p=block_transform.p +gymapi.Vec3(0, 0, self._block_dims[2]/5) , r=self._init_ee_transforms[env_idx].r)
+
+    def _get_pre_poke_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.1, 0, self._block_dims[2]/5), r=poke_transform.r)
+    
+    def _get_poke_final_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.1, 0, self._block_dims[2]/5), r=poke_transform.r)
+
+
 class GraspFrontPolicy(GraspPolicy):
     def _get_grasp_transform(self, env_idx, block_transform):
         # TODO - MS: This is a bit buggy, it is not always possible to easily reach the required transform 

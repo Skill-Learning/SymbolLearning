@@ -11,7 +11,7 @@ from isaacgym_utils.scene import GymScene
 from isaacgym_utils.assets import GymFranka, GymBoxAsset
 from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
-from policy import GraspFrontPolicy, GraspTopPolicy, PokeFrontPolicy, PokeSidePolicy, GraspBlockPolicy
+from policy import GraspFrontPolicy, GraspTopPolicy, PokeFrontPolicy, PokeSidePolicy, GraspBlockPolicy, TopplePolicy
 from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
 import time 
 from visualization.visualizer3d import Visualizer3D as vis3d
@@ -40,17 +40,29 @@ def subsample(pts, rate):
     return pts[idxs[:n]]
 
 class GenerateData():
-    def __init__(self, cfg):
+    def __init__(self, cfg, object_type="std_cube"):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        # TODO - low priority: Replace name block with object
+
+        if object_type == "std_cube":
+            self.block = GymBoxAsset(self.scene, **cfg['block']['dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
+        
+        # TODO: Add other objects
+        elif object_type == "std_cylinder":
+            raise NotImplementedError
+        elif object_type == "std_sphere":
+            raise NotImplementedError
+        elif object_type == "high_cube":
+            self.block = GymBoxAsset(self.scene, **cfg['block']['high_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
+        elif object_type == "long_cube":
+            self.block = GymBoxAsset(self.scene, **cfg['block']['long_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
+        elif object_type == "wide_cube":
+            self.block = GymBoxAsset(self.scene, **cfg['block']['wide_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
 
     # Create Environment 
         self.scene = GymScene(cfg['scene'])
         self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode='torques')
         self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
-        # TODO: Sample block sizes from a distribution later
-        # TODO: Add more shapes to sample from in the train function 
-        self.block = GymBoxAsset(self.scene, **cfg['block']['dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
-
         self.franka_name, self.table_name, self.block_name = 'franka', 'table', 'block'
 
         # Add transforms to scene
@@ -117,9 +129,9 @@ class GenerateData():
 
     def run_episode(self):
         # sample block poses
-
-        # actions = ['PokeX', 'PokeY', 'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        actions = ['PokeX']
+        block_dims = [self.block.sx,self.block.sy,self.block.sz]
+        # actions = ['PokeX', 'PokeY', 'PokeTop' ,'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
+        actions = ['PokeTop']
         action = actions[np.random.randint(0, len(actions))]
         if action == 'PokeX':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
@@ -133,6 +145,9 @@ class GenerateData():
         elif action == 'GraspFront':
             policy = GraspFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
             action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
+        elif action == 'PokeTop':
+            policy = TopplePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
+        
         # elif action == 'GraspSide':
         #     policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
         #     action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
