@@ -42,6 +42,13 @@ def subsample(pts, rate):
 class GenerateData():
     def __init__(self, cfg, object_type="std_cube"):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+    # Create Environment 
+        self.scene = GymScene(cfg['scene'])
+        self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode='torques')
+        self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
+        self.franka_name, self.table_name, self.block_name = 'franka', 'table', 'block'
+
         # TODO - low priority: Replace name block with object
 
         if object_type == "std_cube":
@@ -58,13 +65,6 @@ class GenerateData():
             self.block = GymBoxAsset(self.scene, **cfg['block']['long_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
         elif object_type == "wide_cube":
             self.block = GymBoxAsset(self.scene, **cfg['block']['wide_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
-
-    # Create Environment 
-        self.scene = GymScene(cfg['scene'])
-        self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode='torques')
-        self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
-        self.franka_name, self.table_name, self.block_name = 'franka', 'table', 'block'
-
         # Add transforms to scene
         self.table_transform = gymapi.Transform(p=gymapi.Vec3(cfg['table']['dims']['sx']/3, 0, cfg['table']['dims']['sz']/2))
         self.franka_transform = gymapi.Transform(p=gymapi.Vec3(0, 0, cfg['table']['dims']['sz'] + 0.01))
@@ -131,7 +131,7 @@ class GenerateData():
         # sample block poses
         block_dims = [self.block.sx,self.block.sy,self.block.sz]
         # actions = ['PokeX', 'PokeY', 'PokeTop' ,'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        actions = ['PokeTop']
+        actions = ['PokeX', 'PokeY', 'PokeTop']
         action = actions[np.random.randint(0, len(actions))]
         if action == 'PokeX':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
@@ -147,7 +147,7 @@ class GenerateData():
             action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
         elif action == 'PokeTop':
             policy = TopplePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-        
+            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         # elif action == 'GraspSide':
         #     policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
         #     action_vec = torch.tensor([0, 0, 0, 0, 1, 0])

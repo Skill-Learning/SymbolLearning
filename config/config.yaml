@@ -1,7 +1,7 @@
 scene:
-  n_envs: 25
+  n_envs: 50
   es: 1
-  gui: 1
+  gui: 0
   cam:
     cam_pos: [1.2, 0, 1.2]
     look_at: [0.5, 0, 1]
@@ -109,4 +109,4 @@ coarse_training:
 data:
   use_saved_data: False
   filename: test
-  num_episodes: 3
+  num_episodes: 300
