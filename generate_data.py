@@ -42,7 +42,7 @@ def subsample(pts, rate):
 class GenerateData():
     def __init__(self, cfg, object_type="std_cube"):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
+        self.object_type = object_type
     # Create Environment 
         self.scene = GymScene(cfg['scene'])
         self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode='torques')
@@ -51,19 +51,19 @@ class GenerateData():
 
         # TODO - low priority: Replace name block with object
 
-        if object_type == "std_cube":
+        if self.object_type == "std_cube":
             self.block = GymBoxAsset(self.scene, **cfg['block']['dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
         
         # TODO: Add other objects
-        elif object_type == "std_cylinder":
+        elif self.object_type == "std_cylinder":
             raise NotImplementedError
-        elif object_type == "std_sphere":
+        elif self.object_type == "std_sphere":
             raise NotImplementedError
-        elif object_type == "high_cube":
+        elif self.object_type == "high_cube":
             self.block = GymBoxAsset(self.scene, **cfg['block']['high_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
-        elif object_type == "long_cube":
+        elif self.object_type == "long_cube":
             self.block = GymBoxAsset(self.scene, **cfg['block']['long_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
-        elif object_type == "wide_cube":
+        elif self.object_type == "wide_cube":
             self.block = GymBoxAsset(self.scene, **cfg['block']['wide_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
         # Add transforms to scene
         self.table_transform = gymapi.Transform(p=gymapi.Vec3(cfg['table']['dims']['sx']/3, 0, cfg['table']['dims']['sz']/2))
@@ -199,13 +199,13 @@ class GenerateData():
             img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
             final_images.append(img)
         final_poses = torch.tensor(final_poses)
-        return initial_images, initial_poses, final_images, final_poses, action_vec
+        return initial_images, initial_poses, final_images, final_poses, action_vec, self.object_type
         
     def generate_data(self, num_episodes, csv_path, data_dir):
         for i in range(num_episodes):
-            initial_images, initial_poses, final_images, final_poses, action_vec = self.run_episode()
+            initial_images, initial_poses, final_images, final_poses, action_vec, obj_type= self.run_episode()
             for env_idx in self.scene.env_idxs:
-                row = make_data_row(i, action_vec, initial_poses[env_idx], initial_images[env_idx], final_poses[env_idx], final_images[env_idx], data_dir, env_idx, obj_type="std_cube")
+                row = make_data_row(i, action_vec, initial_poses[env_idx], initial_images[env_idx], final_poses[env_idx], final_images[env_idx], data_dir, env_idx, obj_type= obj_type)
                 with open(csv_path, 'a') as f:
                     writer = csv.writer(f)
                     writer.writerow(row)

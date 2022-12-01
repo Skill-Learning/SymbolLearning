@@ -94,7 +94,8 @@ num_cameras: 1
 # Learning Parameters
 
 device: cuda:0
-
+debug: True
+verbose: True
 image_encoder:
   type: resnet18
   pretrained: True
@@ -109,4 +110,5 @@ coarse_training:
 data:
   use_saved_data: False
   filename: test
+  train_split: 0.75
   num_episodes: 300

@@ -1,5 +1,4 @@
 """
-https://github.com/HobbitLong/SupContrast
 @Article{khosla2020supervised,
     title   = {Supervised Contrastive Learning},
     author  = {Prannay Khosla and Piotr Teterwak and Chen Wang and Aaron Sarna and Yonglong Tian and Phillip Isola and Aaron Maschinot and Ce Liu and Dilip Krishnan},
@@ -12,12 +11,11 @@ import torch
 import torch.nn as nn
 
 
-class SupConLoss(nn.Module):
-    """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
-    It also supports the unsupervised contrastive loss in SimCLR"""
+class SupervisedContrastiveLoss(nn.Module):
+    """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf."""
     def __init__(self, temperature=0.07, contrast_mode='all',
                  base_temperature=0.07):
-        super(SupConLoss, self).__init__()
+        super(SupervisedContrastiveLoss, self).__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
