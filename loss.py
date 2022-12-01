@@ -13,8 +13,8 @@ import torch.nn as nn
 
 class SupervisedContrastiveLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf."""
-    def __init__(self, temperature=0.07, contrast_mode='all',
-                 base_temperature=0.07):
+    def __init__(self, temperature=0.1, contrast_mode='all',
+                 base_temperature=0.1):
         super(SupervisedContrastiveLoss, self).__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
@@ -36,6 +36,8 @@ class SupervisedContrastiveLoss(nn.Module):
                   else torch.device('cpu'))
 
         batch_size = embeddings.shape[0]
+        embed_norm = torch.norm(embeddings, dim=1, p=2).detach()
+        embeddings = embeddings.div(embed_norm.unsqueeze(1))
         embeddings = embeddings.view(batch_size, 1,-1)
         embed_size = embeddings.shape[-1]
 
@@ -87,7 +89,6 @@ class SupervisedContrastiveLoss(nn.Module):
             0
         )
         mask = mask * logits_mask
-
         # compute log_prob
         exp_logits = torch.exp(logits) * logits_mask
         # TODO: multiply the exp_logits with the pose change

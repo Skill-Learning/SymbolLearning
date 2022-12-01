@@ -94,21 +94,26 @@ num_cameras: 1
 # Learning Parameters
 
 device: cuda:0
-debug: True
+debug: False
 verbose: True
 image_encoder:
-  type: resnet18
-  pretrained: True
+  type: ResNet18
+  use_pretrained: True
   
 coarse_training:
   batch_size:
-    train: 32
+    train: 48
     val: 32
   epochs: 100
   lr: 0.001
+  metadata_size: 13
 
 data:
   use_saved_data: True
   filename: test
   train_split: 0.75
   num_episodes: 300
+
+logging:
+  log_enable: True
+  comment: First_iteration

@@ -53,3 +53,5 @@ requirements.txt
 
 data/
 training_data/
+checkpoints/
+runs/
