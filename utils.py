@@ -70,14 +70,15 @@ def make_data_row(episode_num, action_vector,
     row.append(final_img_path)
     return row
 
-def process_row(row):
+def process_row(row, debug=False):
     '''
         row: list of strings
         return obj, action, init_pose, final_pose, init_img, final_img
     '''
     obj = row[2]
     action = row[3]
-    label_str = f"{obj}+{action}"
+    action_str = ACTION_DICT[action]
+    label_str = f"{action_str}+{obj}"
     label = LABELS_DICT[label_str]
     action_vector = []
     for i in action:
@@ -112,8 +113,9 @@ def make_data_dict(list_dirs, save_filename ,debug=False):
         csv_path = f"{dir_path}/data.csv"
         with open(csv_path, 'r') as f:
             reader = csv.reader(f)
+            next(reader)
             for row in reader:
-                label, action_vector, init_pose, final_pose, init_img, final_img = process_row(row)
+                label, action_vector, init_pose, final_pose, init_img, final_img = process_row(row,debug)
                 data_dict.append({
                                 "label": label,
                                 "action_vector": action_vector,

@@ -52,3 +52,4 @@ docs/_build/
 requirements.txt
 
 data/
+training_data/

@@ -108,7 +108,7 @@ coarse_training:
   lr: 0.001
 
 data:
-  use_saved_data: False
+  use_saved_data: True
   filename: test
   train_split: 0.75
   num_episodes: 300

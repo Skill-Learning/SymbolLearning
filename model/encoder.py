@@ -4,7 +4,7 @@ will hopefully be a PN++ type encoder.'''
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-from resnet import ResNet18
+from .resnet import ResNet18
 from torchvision.models import resnet18, ResNet18_Weights
 from utils import *
 

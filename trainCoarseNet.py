@@ -66,7 +66,7 @@ if __name__ == "__main__":
     
         
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', '-c', type=str, default='cfg/config.yaml')
+    parser.add_argument('--cfg', '-c', type=str, default='config/config.yaml')
     args = parser.parse_args()
     cfg = YamlConfig(args.cfg)
 
