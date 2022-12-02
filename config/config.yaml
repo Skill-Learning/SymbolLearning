@@ -104,13 +104,13 @@ coarse_training:
   batch_size:
     train: 48
     val: 32
-  epochs: 100
-  lr: 0.001
+  epochs: 50
+  lr: 0.0001
   metadata_size: 13
 
 data:
   use_saved_data: True
-  filename: test
+  filename: all_cube_objects
   train_split: 0.75
   num_episodes: 300
 

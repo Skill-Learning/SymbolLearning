@@ -13,8 +13,8 @@ import torch.nn as nn
 
 class SupervisedContrastiveLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf."""
-    def __init__(self, temperature=0.1, contrast_mode='all',
-                 base_temperature=0.1):
+    def __init__(self, temperature=0.2, contrast_mode='all',
+                 base_temperature=0.2):
         super(SupervisedContrastiveLoss, self).__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
@@ -60,6 +60,7 @@ class SupervisedContrastiveLoss(nn.Module):
         else:
             mask = mask.float().to(device)
 
+
         contrast_count = embeddings.shape[1]
         contrast_feature = torch.cat(torch.unbind(embeddings, dim=1), dim=0)
         if self.contrast_mode == 'one':
@@ -71,16 +72,10 @@ class SupervisedContrastiveLoss(nn.Module):
         else:
             raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
 
-        # compute logits
-        anchor_dot_contrast = torch.div(
-            torch.matmul(anchor_feature, contrast_feature.T),
-            self.temperature)
-        # for numerical stability
-        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
-        logits = anchor_dot_contrast - logits_max.detach()
 
         # tile mask
         mask = mask.repeat(anchor_count, contrast_count)
+
         # mask-out self-contrast cases
         logits_mask = torch.scatter(
             torch.ones_like(mask),
@@ -89,6 +84,15 @@ class SupervisedContrastiveLoss(nn.Module):
             0
         )
         mask = mask * logits_mask
+
+        # compute logits
+        anchor_dot_contrast = torch.div(
+            torch.matmul(anchor_feature, contrast_feature.T),
+            self.temperature)
+        # for numerical stability
+        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        logits = anchor_dot_contrast - logits_max.detach()
+
         # compute log_prob
         exp_logits = torch.exp(logits) * logits_mask
         # TODO: multiply the exp_logits with the pose change
@@ -103,13 +107,15 @@ class SupervisedContrastiveLoss(nn.Module):
         # del_r = del_r/torch.pi
         # exp_logits = exp_logits * del_r
 
-        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+        log_prob = mask* logits - torch.log(exp_logits.sum(1, keepdim=True))
 
         # compute mean of log-likelihood over positive
-        mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
+        # import ipdb; ipdb.set_trace()
+        non_zero_inds = torch.where(mask.sum(1)!=0)
+        mean_log_prob_pos = (log_prob[non_zero_inds]).sum(1) / mask[non_zero_inds].sum(1)
 
         # loss
         loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
-        loss = loss.view(anchor_count, batch_size).mean()
+        loss = loss.view(anchor_count, -1).mean()
 
         return loss

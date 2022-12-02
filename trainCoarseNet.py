@@ -11,7 +11,10 @@ from torch.utils.data import DataLoader
 from model.encoder import Encoder
 from loss import SupervisedContrastiveLoss
 from tensorboardX import SummaryWriter
-dir_list = ['20221129']
+from tsne_torch import TorchTSNE as TSNE
+
+dir_list = ['20221129',
+            '20221201']
 
 
 def train(net, train_data, loss_fn, optimizer, scheduler, cfg, writer):
@@ -52,9 +55,12 @@ def train(net, train_data, loss_fn, optimizer, scheduler, cfg, writer):
                 optimizer.step()
                 if(cfg['logging']['log_enable']):
                     writer.add_scalar('Loss/train', loss.item(), epoch * _len_train + i)
+                    if(i % 500 == 0):
+                        writer.add_embedding(embeddings, metadata=labels, global_step=epoch * _len_train + i)
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
                 pbar.update(init_img.shape[0])
         
+        # tsne 
         print(f"Epoch {epoch + 1}/{epochs} Loss: {loss.item()}")
         scheduler.step()
         # TODO: Add a validation step

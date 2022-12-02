@@ -237,7 +237,18 @@ if __name__=='__main__':
         except OSError:
             print (f"Creation of the directory data/{curr_date} failed")
 
-    data_generater = GenerateData(cfg)
+    # data_generater = GenerateData(cfg)
 
+    # data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
+
+    data_generater = GenerateData(cfg,object_type='high_cube')
     data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
+
+    data_generater = GenerateData(cfg,object_type='long_cube')
+    data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
+
+    data_generater = GenerateData(cfg,object_type='wide_cube')
+    data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
+
+
 
