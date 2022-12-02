@@ -9,7 +9,7 @@
 
 import torch
 import torch.nn as nn
-
+from utils import *
 
 class SupervisedContrastiveLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf."""
@@ -20,7 +20,7 @@ class SupervisedContrastiveLoss(nn.Module):
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
 
-    def forward(self, embeddings, pose_change, labels=None, mask=None):
+    def forward(self, embeddings, init_pose, final_pose, labels=None, mask=None):
         """Compute loss for model. If both `labels` and `mask` are None,
         Args:
             embeddings: img+ data [B, embed_size]
@@ -41,7 +41,10 @@ class SupervisedContrastiveLoss(nn.Module):
         embeddings = embeddings.view(batch_size, 1,-1)
         embed_size = embeddings.shape[-1]
 
-        if pose_change.shape[0]!= batch_size:
+        if init_pose.shape[0]!= batch_size:
+            raise ValueError('Number of poses do not match the batch size')
+
+        if final_pose.shape[0]!= batch_size:
             raise ValueError('Number of poses do not match the batch size')
 
         if labels.shape[0]!= batch_size:
@@ -60,6 +63,8 @@ class SupervisedContrastiveLoss(nn.Module):
         else:
             mask = mask.float().to(device)
 
+        
+
 
         contrast_count = embeddings.shape[1]
         contrast_feature = torch.cat(torch.unbind(embeddings, dim=1), dim=0)
@@ -71,6 +76,9 @@ class SupervisedContrastiveLoss(nn.Module):
             anchor_count = contrast_count
         else:
             raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
+        # compute delta_pose_metrics
+        delta_pose = pose_dist_metric(init_pose, final_pose).view(batch_size, 1)
+        delta_pose_mat = torch.abs(delta_pose - delta_pose.T)
 
 
         # tile mask
@@ -94,18 +102,7 @@ class SupervisedContrastiveLoss(nn.Module):
         logits = anchor_dot_contrast - logits_max.detach()
 
         # compute log_prob
-        exp_logits = torch.exp(logits) * logits_mask
-        # TODO: multiply the exp_logits with the pose change
-        # convert to rotattion matrix R
-        # del_r = acos(tr(Ri, R_n)-1/2)
-        #  rot_contrast_dot = rot@rot.T
-        # mask: all positives are 1, negatives are 0
-        # logits_mask: all are 1 except anchor
-        # mask_neg = ones - mask
-        # rot_contrast_dot = rot_contrast_dot * mask_neg
-        # del_r = torch.acos(tr(rot_contrast_dot) - 1)/2
-        # del_r = del_r/torch.pi
-        # exp_logits = exp_logits * del_r
+        exp_logits = torch.exp(logits) * logits_mask * delta_pose_mat
 
         log_prob = mask* logits - torch.log(exp_logits.sum(1, keepdim=True))
 

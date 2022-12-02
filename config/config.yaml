@@ -102,10 +102,10 @@ image_encoder:
   
 coarse_training:
   batch_size:
-    train: 48
+    train: 56
     val: 32
   epochs: 50
-  lr: 0.0001
+  lr: 0.001
   metadata_size: 13
 
 data:
@@ -116,4 +116,4 @@ data:
 
 logging:
   log_enable: True
-  comment: First_iteration
+  comment: Pose_Contrastive_Loss

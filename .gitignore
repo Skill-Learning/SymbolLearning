@@ -55,3 +55,4 @@ data/
 training_data/
 checkpoints/
 runs/
+scratchpad.py

@@ -47,10 +47,9 @@ def train(net, train_data, loss_fn, optimizer, scheduler, cfg, writer):
                 action_vector = data['action_vector'].to(device)
 
                 embeddings = net(init_img, action_vector, init_pose)
-                pose_change = final_pose - init_pose
 
                 optimizer.zero_grad()
-                loss = loss_fn(embeddings, pose_change, labels)
+                loss = loss_fn(embeddings, init_pose, final_pose, labels)
                 loss.backward()
                 optimizer.step()
                 if(cfg['logging']['log_enable']):

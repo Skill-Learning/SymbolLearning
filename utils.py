@@ -129,4 +129,36 @@ def make_data_dict(list_dirs, save_filename ,debug=False):
     torch.save(data_dict, save_location)
     return data_dict
 
+def quat2rot(quat):
+    '''
+    quat: [B, 4]
+    
+    '''    
+    w = quat[:, 3]
+    x = quat[:, 0]
+    y = quat[:, 1]
+    z = quat[:, 2]
 
+    A = torch.stack([
+        torch.vstack([w, -z, y, x]),
+        torch.vstack([z, w, -x, y]),
+        torch.vstack([-y, x, w, z]),
+        torch.vstack([-x, -y, -z, w]),
+    ], dim=1)
+    B = torch.stack([
+        torch.vstack([w, -z, y, -x]),
+        torch.vstack([z, w, -x, -y]),
+        torch.vstack([-y, x, w, -z]),
+        torch.vstack([x, y, z, w]),
+    ], dim=1)
+    A = A.view(-1, 4, 4)
+    B = B.view(-1, 4, 4)
+    mat = torch.bmm(A, B.transpose(1, 2))
+    return mat[:, :3, :3]
+
+def pose_dist_metric(pose1, pose2):
+    delta_t = torch.norm(pose1[:, :3] - pose2[:, :3], p=2, dim=1)
+    rot1 = quat2rot(pose1[:, 3:])
+    rot2 = quat2rot(pose2[:, 3:])
+    delta_rot = torch.norm(torch.bmm(rot1, rot2.transpose(1, 2)) - torch.eye(3).cuda(), p=2, dim=(1, 2))
+    return delta_t + delta_rot
