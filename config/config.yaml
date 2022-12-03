@@ -1,7 +1,7 @@
 scene:
   n_envs: 50
   es: 1
-  gui: 0
+  gui: 1
   cam:
     cam_pos: [1.2, 0, 1.2]
     look_at: [0.5, 0, 1]
@@ -15,7 +15,7 @@ scene:
       num_inner_iterations: 30
       relaxation: 0.75
       warm_start: 0.8
-      shape_collision_margin: 1e-3
+      shape_collision_margin: 1e-2
       contact_regularization: 1e-7
       deterministic_mode: True
     device:
@@ -42,11 +42,11 @@ franka:
 
 table:
   dims:
-    sx: 1
+    sx: 1.2
     sy: 1
     sz: 0.5
   shape_props:
-    friction: 0.1
+    friction: 0.1 #0.1
     rolling_friction: 0
     torsion_friction: 0
     thickness: 2e-3
@@ -61,11 +61,11 @@ block:
   high_dims:
     sx: 0.05
     sy: 0.05
-    sz: 0.15
+    sz: 0.25
   long_dims:
     sx: 0.05
-    sy: 0.15
-    sz: 0.05
+    sy: 0.4
+    sz: 0.1
   wide_dims:
     sx: 0.15
     sy: 0.05
@@ -73,9 +73,9 @@ block:
 
 
   shape_props:
-    friction: 0.2
+    friction: 1.0 # 0.5 for std_cube
     rolling_friction: 0.01
-    torsion_friction: 0.01
+    torsion_friction: 0.05
     thickness: 2e-3
   rb_props:
     flags: none # can be none, no_sim, no_gravity
@@ -112,7 +112,7 @@ data:
   use_saved_data: True
   filename: all_cube_objects
   train_split: 0.75
-  num_episodes: 300
+  num_episodes: 75
 
 logging:
   log_enable: True

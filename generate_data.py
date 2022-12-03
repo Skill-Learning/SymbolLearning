@@ -11,7 +11,7 @@ from isaacgym_utils.scene import GymScene
 from isaacgym_utils.assets import GymFranka, GymBoxAsset
 from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
-from policy import GraspFrontPolicy, GraspTopPolicy, PokeFrontPolicy, PokeSidePolicy, GraspBlockPolicy, TopplePolicy
+from policy import *
 from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
 import time 
 from visualization.visualizer3d import Visualizer3D as vis3d
@@ -131,39 +131,44 @@ class GenerateData():
         # sample block poses
         block_dims = [self.block.sx,self.block.sy,self.block.sz]
         # actions = ['PokeX', 'PokeY', 'PokeTop' ,'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        actions = ['PokeX', 'PokeY', 'PokeTop']
+        # actions = ['PokeTop', 'PokeX', 'PokeY', 'PokeFrontRE', 'PokeFrontLE']
+        actions = ['PokeFrontRE']
         action = actions[np.random.randint(0, len(actions))]
         if action == 'PokeX':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
             action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
         elif action == 'PokeY':
-            policy = PokeSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
+            policy = PokeSidePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
             action_vec = torch.tensor([0, 1, 0, 0, 0, 0])
-        elif action == 'GraspTop':
-            policy = GraspTopPolicy(self.franka, self.franka_name, self.block, self.block_name)
+        elif action == 'PokeFrontRE':
+            policy = PushFrontREPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
             action_vec = torch.tensor([0, 0, 1, 0, 0, 0])
-        elif action == 'GraspFront':
-            policy = GraspFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
+        elif action == 'PokeFrontLE':
+            policy = PushFrontLEPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
             action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
         elif action == 'PokeTop':
-            policy = TopplePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
+            policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
+            if(self.object_type == "high_cube"):
+                policy = TopplePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
             action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         # elif action == 'GraspSide':
         #     policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
         #     action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         elif action == 'Testing':
             '''This is just a random condition to test the environment, move to the hardcoded position'''
-            ee_pose = self.franka.get_ee_transform(0, 'franka')
-            # pose = gymapi.Transform(p = gymapi.Vec3(0.4, 0.4, 0.5), r = ee_pose.r)
-            policy = GraspTopPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([0, 0, 0, 0, 0, 1])
+            policy = PushFrontLEPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
+            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         else:
             raise ValueError(f"Invalid action {action}")
 
+        if(self.object_type == "high_cube"):
+            z = cfg['table']['dims']['sz'] + cfg['block']['high_dims']['sz'] / 2 + 0.1
+        else:
+            z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         block_transforms = [gymapi.Transform(p=gymapi.Vec3(
-            (np.random.rand()*2 - 1) * 0.1 + 0.5, 
+            (np.random.rand()*2 - 1) * 0.1 + 0.4, 
             (np.random.rand()*2 - 1) * 0.2,
-            cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
+            z
         )) for _ in range(self.scene.n_envs)]
 
         # set block poses
@@ -186,6 +191,7 @@ class GenerateData():
             img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
             img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
             initial_images.append(img)
+        initial_poses = np.array(initial_poses)
         initial_poses = torch.tensor(initial_poses)
 
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
@@ -198,17 +204,18 @@ class GenerateData():
             img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
             img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
             final_images.append(img)
+        final_poses = np.array(final_poses)
         final_poses = torch.tensor(final_poses)
         return initial_images, initial_poses, final_images, final_poses, action_vec, self.object_type
         
     def generate_data(self, num_episodes, csv_path, data_dir):
         for i in range(num_episodes):
             initial_images, initial_poses, final_images, final_poses, action_vec, obj_type= self.run_episode()
-            for env_idx in self.scene.env_idxs:
-                row = make_data_row(i, action_vec, initial_poses[env_idx], initial_images[env_idx], final_poses[env_idx], final_images[env_idx], data_dir, env_idx, obj_type= obj_type)
-                with open(csv_path, 'a') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(row)
+            # for env_idx in self.scene.env_idxs:
+            #     row = make_data_row(i, action_vec, initial_poses[env_idx], initial_images[env_idx], final_poses[env_idx], final_images[env_idx], data_dir, env_idx, obj_type= obj_type)
+            #     with open(csv_path, 'a') as f:
+            #         writer = csv.writer(f)
+            #         writer.writerow(row)
 
 
 if __name__=='__main__':
@@ -241,13 +248,10 @@ if __name__=='__main__':
 
     # data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
 
+    # data_generater = GenerateData(cfg,object_type='std_cube')
+    # data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
+
     data_generater = GenerateData(cfg,object_type='high_cube')
-    data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
-
-    data_generater = GenerateData(cfg,object_type='long_cube')
-    data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
-
-    data_generater = GenerateData(cfg,object_type='wide_cube')
     data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
 
 

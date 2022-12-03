@@ -13,8 +13,8 @@ from utils import *
 
 class SupervisedContrastiveLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf."""
-    def __init__(self, temperature=0.2, contrast_mode='all',
-                 base_temperature=0.2):
+    def __init__(self, temperature=0.07, contrast_mode='all',
+                 base_temperature=0.07):
         super(SupervisedContrastiveLoss, self).__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
@@ -104,12 +104,12 @@ class SupervisedContrastiveLoss(nn.Module):
         # compute log_prob
         exp_logits = torch.exp(logits) * logits_mask * delta_pose_mat
 
-        log_prob = mask* logits - torch.log(exp_logits.sum(1, keepdim=True))
+        log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
 
         # compute mean of log-likelihood over positive
         # import ipdb; ipdb.set_trace()
         non_zero_inds = torch.where(mask.sum(1)!=0)
-        mean_log_prob_pos = (log_prob[non_zero_inds]).sum(1) / mask[non_zero_inds].sum(1)
+        mean_log_prob_pos = (mask[non_zero_inds]*log_prob[non_zero_inds]).sum(1) / mask[non_zero_inds].sum(1)
 
         # loss
         loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
