@@ -11,7 +11,10 @@ class PoseNet(nn.Module):
         self.cfg = cfg
 
         self.embedding_dim = 1024
-        self.mlp = nn.Sequential(nn.Linear(self.embedding_dim, 512),
+        self.mlp = nn.Sequential(nn.Linear(self.embedding_dim, 1024),
+                                    nn.ReLU(),
+                                    nn.BatchNorm1d(1024),
+                                    nn.Linear(1024, 512),
                                     nn.ReLU(),
                                     nn.BatchNorm1d(512),
                                     nn.Linear(512, 256),
@@ -19,7 +22,8 @@ class PoseNet(nn.Module):
                                 )
         self.position_mlp = nn.Sequential(nn.Linear(256, 3))
         self.quaternion_mlp = nn.Sequential(nn.Linear(256, 4), 
-                                            nn.Softmax(dim=1))
+                                            # nn.Softmax(dim=1)
+                                            )
     def forward(self,embedding):
         # embedding: [B, 1024]
         # output: [B, 7]

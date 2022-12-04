@@ -18,7 +18,7 @@ dir_list = [
             ]
     
 
-def val(net, pose_net, val_data, loss_fn, cfg, writer, dir_path, step_number):
+def test(net, pose_net, val_data, loss_fn, cfg, csv_writer):
     batch_size = cfg['fine_training']['batch_size']['val']
     device = cfg['device']
     _len_val = len(val_data)
@@ -26,79 +26,24 @@ def val(net, pose_net, val_data, loss_fn, cfg, writer, dir_path, step_number):
     pose_net.eval()
     net.eval()
     with torch.no_grad():
-        with tqdm(total=_len_val, desc=f'Validation', unit='epoch') as pbar:
-            for i, data in enumerate(val_data):
-                # [B, C, H, W]
-                init_img = data['init_img'].float().to(device)
-                # final_img = data['final_img'].to(device)
-                # [B, 7]
-                init_pose = data['init_pose'].to(device)
-                final_pose = data['final_pose'].to(device)
+        for i, data in enumerate(val_data):
+            # [B, C, H, W]
+            init_img = data['init_img'].float().to(device)
+            # final_img = data['final_img'].to(device)
+            # [B, 7]
+            init_pose = data['init_pose'].to(device)
+            final_pose = data['final_pose'].to(device)
 
-                # [B, 6]
-                action_vector = data['action_vector'].to(device)
+            # [B, 6]
+            action_vector = data['action_vector'].to(device)
 
-                embeddings = net(init_img, action_vector, init_pose)
-                predicted_pose = pose_net(embeddings)
-                loss = loss_fn(predicted_pose, final_pose)
-
-                pbar.set_postfix(**{'loss (batch)': loss.item()})
-                pbar.update(init_img.shape[0])
-    if(cfg['logging']['log_enable']):
-        writer.add_scalar('Loss/val', loss.item(), step_number)
-        writer.close()
+            embeddings = net(init_img, action_vector, init_pose)
+            predicted_pose = pose_net(embeddings)
+            for i in range(predicted_pose.shape[0]):
+                row = make_inference_row(action_vector[i], init_pose[i], final_pose[i], predicted_pose[i])
+                csv_writer.writerow(row)
 
 
-def train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data):
-
-    if(cfg['debug']):
-        print("DEBUG MODE")
-        import ipdb; ipdb.set_trace()
-
-    batch_size = cfg['fine_training']['batch_size']['train']
-    epochs = cfg['fine_training']['epochs']
-    device = cfg['device']
-    lr = cfg['fine_training']['lr']
-    _len_train = len(train_data)
-    train_data = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
-    step_number = 0 
-    for epoch in range(epochs):
-        
-        pose_net.train()
-        net.eval()
-        with tqdm(total=_len_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='epoch') as pbar:
-            for i, data in enumerate(train_data):
-                # [B, C, H, W]
-                init_img = data['init_img'].float().to(device)
-                # final_img = data['final_img'].to(device)
-                # [B, 7]
-                init_pose = data['init_pose'].to(device)
-                final_pose = data['final_pose'].to(device)
-
-                # [B, 6]
-                action_vector = data['action_vector'].to(device)
-
-                embeddings = net(init_img, action_vector, init_pose)
-                predicted_pose = pose_net(embeddings)
-                optimizer.zero_grad()
-                loss = loss_fn(predicted_pose, final_pose)
-                loss.backward()
-                optimizer.step()
-                step_number += 1
-                if(cfg['logging']['log_enable']):
-                    writer.add_scalar('Loss/train', loss.item(), step_number)
-                pbar.set_postfix(**{'loss (batch)': loss.item()})
-                pbar.update(init_img.shape[0])
-        
-        print(f"Epoch {epoch + 1}/{epochs} Loss: {loss.item()}")
-        scheduler.step()
-        # TODO: Add a validation step
-        torch.save(net.state_dict(), f'{dir_path}/{epoch}.pth')
-        print(f"Checkpoint {epoch} saved !")
-        print("Validation")
-        val(net, pose_net, test_data, loss_fn, cfg, writer, dir_path, step_number)
-    if(cfg['logging']['log_enable']):
-        writer.close()
 
 
 if __name__ == "__main__":
@@ -130,17 +75,18 @@ if __name__ == "__main__":
     # load the weights from the encoder
     net.load_state_dict(torch.load(cfg['fine_training']['encoder_weights']))
     net.eval()
+
     pose_net = PoseNet(cfg).to(device)
     pose_net.load_state_dict(torch.load(cfg['fine_training']['pose_weights']))
     loss_fn = torch.nn.MSELoss()
     optimizer = optim.Adam(pose_net.parameters(), lr=cfg['fine_training']['lr'])
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg['fine_training']['epochs'])
 
-    writer = None
-    if(cfg['logging']['log_enable']):
-        writer = SummaryWriter(comment=f"_fine_LR_{cfg['fine_training']['lr']}_BS_{cfg['fine_training']['batch_size']['train']}_{cfg['logging']['comment']}")
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dir_path = f"checkpoints/fine_training/{cfg['fine_training']['save_filename']}_{timestamp}"
-    os.makedirs(dir_path, exist_ok=True)
-    train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data)
+
+    inference_file_path = f"{cfg['fine_training']['inference_dir']}/inference_{timestamp}.csv"
+    with open(inference_file_path, 'w') as f:
+        csv_writer = csv.writer(f)
+        csv_writer.writerow(['action_vector', 'init_pose', 'final_pose', 'predicted_pose'])
+        test(net, pose_net, test_data, loss_fn, cfg, csv_writer)
+

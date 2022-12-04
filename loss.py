@@ -116,3 +116,14 @@ class SupervisedContrastiveLoss(nn.Module):
         loss = loss.view(anchor_count, -1).mean()
 
         return loss
+
+
+
+class PoseLoss(nn.Module):
+    def __init__(self ):
+        super(PoseLoss, self).__init__()
+        self.temp_mode = 'all'
+    def forward(self, pred_poses, target_poses):
+        loss = pose_dist_metric(pred_poses, target_poses)
+        loss = loss.mean()
+        return loss

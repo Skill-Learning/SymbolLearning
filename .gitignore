@@ -56,3 +56,4 @@ training_data/
 checkpoints/
 runs/
 scratchpad.py
+inference_files/

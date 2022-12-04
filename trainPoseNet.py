@@ -9,7 +9,7 @@ from autolab_core import YamlConfig
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from model.encoder import Encoder
-from loss import SupervisedContrastiveLoss
+from loss import SupervisedContrastiveLoss, PoseLoss
 from tensorboardX import SummaryWriter
 from model.poseNet import PoseNet
 
@@ -81,7 +81,9 @@ def train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer,
                 embeddings = net(init_img, action_vector, init_pose)
                 predicted_pose = pose_net(embeddings)
                 optimizer.zero_grad()
-                loss = loss_fn(predicted_pose, final_pose)
+                delta_pred = predicted_pose[:,:3] - init_pose[:,:3]
+                delta_gt = final_pose[:,:3] - init_pose[:,:3]
+                loss = loss_fn(delta_pred, delta_gt)
                 loss.backward()
                 optimizer.step()
                 step_number += 1
@@ -93,7 +95,7 @@ def train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer,
         print(f"Epoch {epoch + 1}/{epochs} Loss: {loss.item()}")
         scheduler.step()
         # TODO: Add a validation step
-        torch.save(net.state_dict(), f'{dir_path}/{epoch}.pth')
+        torch.save(pose_net.state_dict(), f'{dir_path}/{epoch}.pth')
         print(f"Checkpoint {epoch} saved !")
         print("Validation")
         val(net, pose_net, test_data, loss_fn, cfg, writer, dir_path, step_number)
@@ -122,6 +124,13 @@ if __name__ == "__main__":
             print("Data preprocessing done !")
     
     print("Loading data...")
+    data_dict = load_data_without_split(cfg['fine_training']['save_filename'])
+    # import ipdb; ipdb.set_trace()
+    # data_split = cfg['data']['train_split']
+    # train_data, test_data = torch.utils.data.random_split(
+    #                         data_dict,
+    #                             [int(data_split*len(data_dict)), len(data_dict)-int(data_split*len(data_dict))], 
+    #                             generator=torch.Generator().manual_seed(42))
     train_data, test_data = load_data_dict(cfg['fine_training']['save_filename'], cfg['data']['train_split'])
     if cfg['verbose']:
         print("Data loaded !")
@@ -131,7 +140,7 @@ if __name__ == "__main__":
     net.load_state_dict(torch.load(cfg['fine_training']['encoder_weights']))
     net.eval()
     pose_net = PoseNet(cfg).to(device)
-    loss_fn = torch.nn.MSELoss()
+    loss_fn = nn.MSELoss()
     optimizer = optim.Adam(pose_net.parameters(), lr=cfg['fine_training']['lr'])
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg['fine_training']['epochs'])
 

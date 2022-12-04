@@ -41,6 +41,10 @@ def load_data_dict(filename, data_split=0.75):
                                  generator=torch.Generator().manual_seed(42))
     return train_data, test_data
 
+def load_data_without_split(filename):
+    data_dict = torch.load(f"{os.getcwd()}/training_data/{filename}.pt")
+    return data_dict
+
 def make_data_row(episode_num, action_vector, 
                     init_pose, init_img, final_pose, final_img, data_dir, env_idx, obj_type="std_cube"):
     '''
@@ -68,6 +72,25 @@ def make_data_row(episode_num, action_vector,
     final_img_path = f"{data_dir}/images/{episode_num}_{env_idx}_final_image_{timestamp}.png"
     torchvision.utils.save_image(final_img, final_img_path)
     row.append(final_img_path)
+    return row
+
+def make_inference_row(action_vector, 
+                    init_pose, gt_pose, predicted_pose):
+    '''
+        make a row of data for training
+    '''
+    row = []
+    action_str = ""
+    action_vector = action_vector.tolist()
+    for i in range(len(action_vector)):
+        action_str += str(action_vector[i])
+    row.append(action_str)
+    for i in range(7):
+        row.append(init_pose[i].item())
+    for i in range(7):
+        row.append(gt_pose[i].item())
+    for i in range(7):
+        row.append(predicted_pose[i].item())
     return row
 
 def process_row(row, debug=False):

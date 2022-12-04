@@ -116,14 +116,16 @@ data:
 
 logging:
   log_enable: True
-  comment: fine_train_pose_normalize
+  comment: Position_delta_L2
 
 fine_training:
   batch_size:
     train: 48
     val: 32
   epochs: 50
-  lr: 0.00005
+  lr: 0.0001
   use_saved_data: True
   save_filename: new_policies_with_object_labels
   encoder_weights: checkpoints/new_policies_with_object_labels_20221203_194229/29.pth
+  pose_weights: checkpoints/fine_training/new_policies_with_object_labels_20221204_000129/14.pth
+  inference_dir: inference_files
