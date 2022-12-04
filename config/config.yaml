@@ -1,7 +1,7 @@
 scene:
-  n_envs: 50
+  n_envs: 1
   es: 1
-  gui: 0
+  gui: 1
   cam:
     cam_pos: [1.2, 0, 1.2]
     look_at: [0.5, 0, 1]
@@ -42,8 +42,8 @@ franka:
 
 table:
   dims:
-    sx: 1.2
-    sy: 1
+    sx: 2
+    sy: 2
     sz: 0.5
   shape_props:
     friction: 0.1 #0.1
@@ -73,13 +73,13 @@ block:
 
 
   shape_props:
-    friction: 1.0 # 0.5 for std_cube
+    friction: 0.75 # 0.5 for std_cube
     rolling_friction: 0.01
     torsion_friction: 0.05
     thickness: 2e-3
   rb_props:
     flags: none # can be none, no_sim, no_gravity
-    color: [0.2, 0.7, 0.2]
+    color: [0.078,0.353,0.667]
   asset_options:
     density: 1000
 
@@ -88,7 +88,6 @@ camera:
   height: 240
 
 num_cameras: 1
-
 
 # ______________________________________________________________________________
 # Learning Parameters
