@@ -11,17 +11,19 @@ from torch.utils.data import DataLoader
 from model.encoder import Encoder
 from loss import SupervisedContrastiveLoss
 from tensorboardX import SummaryWriter
-from tsne_torch import TorchTSNE as TSNE
+from model.poseNet import PoseNet
 
 dir_list = [
             '20221203',
             ]
+    
 
-def val(net, val_data, loss_fn, cfg, writer, dir_path):
-    batch_size = cfg['coarse_training']['batch_size']['val']
+def val(net, pose_net, val_data, loss_fn, cfg, writer, dir_path, step_number):
+    batch_size = cfg['fine_training']['batch_size']['val']
     device = cfg['device']
     _len_val = len(val_data)
     val_data = DataLoader(val_data, batch_size=batch_size, shuffle=True, drop_last=True)
+    pose_net.eval()
     net.eval()
     with torch.no_grad():
         with tqdm(total=_len_val, desc=f'Validation', unit='epoch') as pbar:
@@ -32,40 +34,38 @@ def val(net, val_data, loss_fn, cfg, writer, dir_path):
                 # [B, 7]
                 init_pose = data['init_pose'].to(device)
                 final_pose = data['final_pose'].to(device)
-                # [B,]
-                labels = data['label'].to(device)
 
                 # [B, 6]
                 action_vector = data['action_vector'].to(device)
 
                 embeddings = net(init_img, action_vector, init_pose)
+                predicted_pose = pose_net(embeddings)
+                loss = loss_fn(predicted_pose, final_pose)
 
-                loss = loss_fn(embeddings, init_pose, final_pose, labels)
-                if(cfg['logging']['log_enable']):
-                    writer.add_scalar('Loss/val', loss.item(), i)
-                    # if(i % 500 == 0):
-                    #     writer.add_embedding(embeddings, metadata=labels, global_step=i)
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
                 pbar.update(init_img.shape[0])
     if(cfg['logging']['log_enable']):
+        writer.add_scalar('Loss/val', loss.item(), step_number)
         writer.close()
 
 
-def train(net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data):
+def train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data):
 
     if(cfg['debug']):
         print("DEBUG MODE")
         import ipdb; ipdb.set_trace()
 
-    batch_size = cfg['coarse_training']['batch_size']['train']
-    epochs = cfg['coarse_training']['epochs']
+    batch_size = cfg['fine_training']['batch_size']['train']
+    epochs = cfg['fine_training']['epochs']
     device = cfg['device']
-    lr = cfg['coarse_training']['lr']
+    lr = cfg['fine_training']['lr']
     _len_train = len(train_data)
     train_data = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
-    
+    step_number = 0 
     for epoch in range(epochs):
-        net.train()
+        
+        pose_net.train()
+        net.eval()
         with tqdm(total=_len_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='epoch') as pbar:
             for i, data in enumerate(train_data):
                 # [B, C, H, W]
@@ -74,33 +74,29 @@ def train(net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path,
                 # [B, 7]
                 init_pose = data['init_pose'].to(device)
                 final_pose = data['final_pose'].to(device)
-                # [B,]
-                labels = data['label'].to(device)
 
                 # [B, 6]
                 action_vector = data['action_vector'].to(device)
 
                 embeddings = net(init_img, action_vector, init_pose)
-
+                predicted_pose = pose_net(embeddings)
                 optimizer.zero_grad()
-                loss = loss_fn(embeddings, init_pose, final_pose, labels)
+                loss = loss_fn(predicted_pose, final_pose)
                 loss.backward()
                 optimizer.step()
+                step_number += 1
                 if(cfg['logging']['log_enable']):
-                    writer.add_scalar('Loss/train', loss.item(), epoch * _len_train + i)
-                    if(i % 500 == 0):
-                        writer.add_embedding(embeddings, metadata=labels, global_step=epoch * _len_train + i)
+                    writer.add_scalar('Loss/train', loss.item(), step_number)
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
                 pbar.update(init_img.shape[0])
         
-        # tsne 
         print(f"Epoch {epoch + 1}/{epochs} Loss: {loss.item()}")
         scheduler.step()
         # TODO: Add a validation step
         torch.save(net.state_dict(), f'{dir_path}/{epoch}.pth')
         print(f"Checkpoint {epoch} saved !")
         print("Validation")
-        val(net, test_data, loss_fn, cfg, writer, dir_path)
+        val(net, pose_net, test_data, loss_fn, cfg, writer, dir_path, step_number)
     if(cfg['logging']['log_enable']):
         writer.close()
 
@@ -118,32 +114,33 @@ if __name__ == "__main__":
 
     device = torch.device(cfg['device'])
 
-    if not cfg['data']['use_saved_data']:
+    if not cfg['fine_training']['use_saved_data']:
         if cfg['verbose']:
             print("Preprocessing data...")
-        make_data_dict(dir_list, cfg['data']['filename'], cfg['debug'])
+        make_data_dict(dir_list, cfg['fine_training']['save_filename'], cfg['debug'])
         if cfg['verbose']:
             print("Data preprocessing done !")
     
     print("Loading data...")
-    train_data, test_data = load_data_dict(cfg['data']['filename'], cfg['data']['train_split'])
+    train_data, test_data = load_data_dict(cfg['fine_training']['save_filename'], cfg['data']['train_split'])
     if cfg['verbose']:
         print("Data loaded !")
     
     net = Encoder(cfg).to(device)
-    loss_fn = SupervisedContrastiveLoss()
-    optimizer = optim.Adam(net.parameters(), lr=cfg['coarse_training']['lr'])
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg['coarse_training']['epochs'])
+    # load the weights from the encoder
+    net.load_state_dict(torch.load(cfg['fine_training']['encoder_weights']))
+    net.eval()
+    pose_net = PoseNet(cfg).to(device)
+    pose_net.load_state_dict(torch.load(cfg['fine_training']['pose_weights']))
+    loss_fn = torch.nn.MSELoss()
+    optimizer = optim.Adam(pose_net.parameters(), lr=cfg['fine_training']['lr'])
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg['fine_training']['epochs'])
 
     writer = None
     if(cfg['logging']['log_enable']):
-        writer = SummaryWriter(comment=f"_LR_{cfg['coarse_training']['lr']}_BS_{cfg['coarse_training']['batch_size']['train']}_{cfg['logging']['comment']}")
+        writer = SummaryWriter(comment=f"_fine_LR_{cfg['fine_training']['lr']}_BS_{cfg['fine_training']['batch_size']['train']}_{cfg['logging']['comment']}")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dir_path = f"checkpoints/{cfg['data']['filename']}_{timestamp}"
+    dir_path = f"checkpoints/fine_training/{cfg['fine_training']['save_filename']}_{timestamp}"
     os.makedirs(dir_path, exist_ok=True)
-    train(net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data)
-
-    # MS: 
-    # TODO: add linear warmup
-    # TODO: maybe use LARS optimizer: https://github.com/kakaobrain/torchlars
+    train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data)

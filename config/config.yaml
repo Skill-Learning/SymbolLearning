@@ -1,7 +1,7 @@
 scene:
   n_envs: 50
   es: 1
-  gui: 1
+  gui: 0
   cam:
     cam_pos: [1.2, 0, 1.2]
     look_at: [0.5, 0, 1]
@@ -102,18 +102,28 @@ image_encoder:
   
 coarse_training:
   batch_size:
-    train: 56
+    train: 48
     val: 32
   epochs: 50
-  lr: 0.001
+  lr: 0.0001
   metadata_size: 13
 
 data:
   use_saved_data: True
-  filename: all_cube_objects
+  filename: new_policies_with_object_labels
   train_split: 0.75
   num_episodes: 75
 
 logging:
   log_enable: True
-  comment: Pose_Contrastive_Loss
+  comment: fine_train_pose_normalize
+
+fine_training:
+  batch_size:
+    train: 48
+    val: 32
+  epochs: 50
+  lr: 0.00005
+  use_saved_data: True
+  save_filename: new_policies_with_object_labels
+  encoder_weights: checkpoints/new_policies_with_object_labels_20221203_194229/29.pth
