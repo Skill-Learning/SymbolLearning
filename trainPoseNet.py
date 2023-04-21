@@ -14,11 +14,11 @@ from tensorboardX import SummaryWriter
 from model.poseNet import PoseNet
 
 dir_list = [
-            '20221203',
+            'REAL_DATA',
             ]
     
 
-def val(net, pose_net, val_data, loss_fn, cfg, writer, dir_path, step_number):
+def val(net, pose_net, val_data, loss_fn, cfg, writer, dir_path, step_number, mean, std):
     batch_size = cfg['fine_training']['batch_size']['val']
     device = cfg['device']
     _len_val = len(val_data)
@@ -40,8 +40,10 @@ def val(net, pose_net, val_data, loss_fn, cfg, writer, dir_path, step_number):
 
                 embeddings = net(init_img, action_vector, init_pose)
                 predicted_pose = pose_net(embeddings)
-                loss = loss_fn(predicted_pose, final_pose)
-
+                delta_gt = data['delta_gt'].to(device)
+                delta_gt = delta_gt[:,:3]
+                delta_pred = predicted_pose[:,:3]
+                loss = loss_fn(delta_pred, delta_gt)
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
                 pbar.update(init_img.shape[0])
     if(cfg['logging']['log_enable']):
@@ -49,7 +51,7 @@ def val(net, pose_net, val_data, loss_fn, cfg, writer, dir_path, step_number):
         writer.close()
 
 
-def train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data):
+def train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data, mean, std):
 
     if(cfg['debug']):
         print("DEBUG MODE")
@@ -81,8 +83,12 @@ def train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer,
                 embeddings = net(init_img, action_vector, init_pose)
                 predicted_pose = pose_net(embeddings)
                 optimizer.zero_grad()
-                delta_pred = predicted_pose[:,:3] - init_pose[:,:3]
-                delta_gt = final_pose[:,:3] - init_pose[:,:3]
+                # delta_pred = predicted_pose - init_pose
+                # delta_pred = (delta_pred - mean)/std
+                # delta_pred = delta_pred[:,:3]
+                delta_gt = data['delta_gt'].to(device)
+                delta_gt = delta_gt[:,:3]
+                delta_pred = predicted_pose[:,:3]
                 loss = loss_fn(delta_pred, delta_gt)
                 loss.backward()
                 optimizer.step()
@@ -98,7 +104,7 @@ def train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer,
         torch.save(pose_net.state_dict(), f'{dir_path}/{epoch}.pth')
         print(f"Checkpoint {epoch} saved !")
         print("Validation")
-        val(net, pose_net, test_data, loss_fn, cfg, writer, dir_path, step_number)
+        val(net, pose_net, test_data, loss_fn, cfg, writer, dir_path, step_number, mean, std)
     if(cfg['logging']['log_enable']):
         writer.close()
 
@@ -114,24 +120,23 @@ if __name__ == "__main__":
     if cfg['debug']:
         import ipdb; ipdb.set_trace()
 
-    device = torch.device(cfg['device'])
+    device = torch.device(cfg['device']) 
 
     if not cfg['fine_training']['use_saved_data']:
         if cfg['verbose']:
             print("Preprocessing data...")
-        make_data_dict(dir_list, cfg['fine_training']['save_filename'], cfg['debug'])
+        make_normalized_data_dict(dir_list, cfg['fine_training']['save_filename'], cfg['debug'])
         if cfg['verbose']:
             print("Data preprocessing done !")
     
     print("Loading data...")
-    data_dict = load_data_without_split(cfg['fine_training']['save_filename'])
     # import ipdb; ipdb.set_trace()
-    # data_split = cfg['data']['train_split']
-    # train_data, test_data = torch.utils.data.random_split(
-    #                         data_dict,
-    #                             [int(data_split*len(data_dict)), len(data_dict)-int(data_split*len(data_dict))], 
-    #                             generator=torch.Generator().manual_seed(42))
-    train_data, test_data = load_data_dict(cfg['fine_training']['save_filename'], cfg['data']['train_split'])
+    data_dict, init_mean, init_std, delta_gt_mean, delta_gt_std = load_normalized_coarse_data_dict(cfg['fine_training']['save_filename'])
+    data_split = cfg['data']['train_split']
+    train_data, test_data = torch.utils.data.random_split(
+                            data_dict,
+                                [int(data_split*len(data_dict)), len(data_dict)-int(data_split*len(data_dict))], 
+                                generator=torch.Generator().manual_seed(42))
     if cfg['verbose']:
         print("Data loaded !")
     
@@ -151,4 +156,4 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dir_path = f"checkpoints/fine_training/{cfg['fine_training']['save_filename']}_{timestamp}"
     os.makedirs(dir_path, exist_ok=True)
-    train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data)
+    train(net, pose_net, train_data, loss_fn, optimizer, scheduler, cfg, writer, dir_path, test_data, delta_gt_mean, delta_gt_std)

@@ -131,7 +131,7 @@ class GenerateData():
         # sample block poses
         block_dims = [self.block.sx,self.block.sy,self.block.sz]
         # actions = ['PokeX', 'PokeY', 'PokeTop' ,'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        actions = ['PokeTop', 'PokeX', 'PokeY', 'PokeFrontRE', 'PokeFrontLE']
+        actions = ['PokeX', 'PokeY']
         # actions = ['PokeFrontRE']
         action = actions[np.random.randint(0, len(actions))]
         if action == 'PokeX':
@@ -170,6 +170,8 @@ class GenerateData():
             (np.random.rand()*2 - 1) * 0.2,
             z
         )) for _ in range(self.scene.n_envs)]
+
+
 
         # set block poses
         for env_idx in self.scene.env_idxs:
@@ -232,17 +234,17 @@ if __name__=='__main__':
 
 
     curr_date = datetime.now().strftime("%Y%m%d")
-    csv_path = f"data/{curr_date}/data.csv"
-    data_dir = os.getcwd() + f"/data/{curr_date}"
-    if(not os.path.exists(f"data/{curr_date}")):
+    csv_path = f"data/{curr_date}_REAL/data.csv"
+    data_dir = os.getcwd() + f"/data/{curr_date}_REAL"
+    if(not os.path.exists(f"data/{curr_date}_REAL")):
         try:
-            os.mkdir(f"data/{curr_date}")
+            os.mkdir(f"data/{curr_date}_REAL")
             with open(csv_path, 'w') as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
-            os.mkdir(f"data/{curr_date}/images")
+            os.mkdir(f"data/{curr_date}_REAL/images")
         except OSError:
-            print (f"Creation of the directory data/{curr_date} failed")
+            print (f"Creation of the directory data/{curr_date}_REAL failed")
 
     # data_generater = GenerateData(cfg)
 

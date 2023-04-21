@@ -3,6 +3,7 @@
 ACTION_DICT = {
     "100000" : "PokeX",
     "010000" : "PokeY",
+    "10000" : "PokeY",
     "001000" : "PokeFrontRE",
     "000100" : "PokeFrontLE",
     "000010" : "PokeTop",

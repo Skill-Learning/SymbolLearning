@@ -7,6 +7,8 @@ from datetime import datetime
 import os
 import csv
 from labels_dict import *
+import torchvision.transforms as T
+
 def init_weights_and_freeze(model_tgt, model_src, freeze_layers = []):
     '''
         copy weights to existing layers in model_tgt from model_src
@@ -116,10 +118,10 @@ def process_row(row, debug=False):
     for i in range(7):
         final_pose.append(float(row[11+i]))
     final_pose = torch.tensor(final_pose)
+    path = f"data/REAL_DATA"
+    init_img = torchvision.io.read_image(path + row[18])
 
-    init_img = torchvision.io.read_image(row[18])
-
-    final_img = torchvision.io.read_image(row[19])
+    final_img = torchvision.io.read_image(path + row[19])
 
     return label, action_vector, init_pose, final_pose, init_img, final_img
 
@@ -151,6 +153,79 @@ def make_data_dict(list_dirs, save_filename ,debug=False):
     print(f"Saving data to {save_location}")
     torch.save(data_dict, save_location)
     return data_dict
+
+def make_normalized_data_dict(list_dirs, save_filename ,debug=False):
+    if(debug):
+        import ipdb; ipdb.set_trace()
+    transform = T.Resize(size = (320, 240))
+    data_dict = []
+    for dir in list_dirs:
+        if(debug):
+            print(f"Processing {dir}")
+        dir_path = os.path.join(os.getcwd(), f"data/{dir}")
+        csv_path = f"{dir_path}/data.csv"
+        with open(csv_path, 'r') as f:
+            reader = csv.reader(f)
+            next(reader)
+            for row in reader:
+                label, action_vector, init_pose, final_pose, init_img, final_img = process_row(row,debug)
+                init_img = transform(init_img)
+                data_dict.append({
+                                "label": label,
+                                "action_vector": action_vector,
+                                "init_pose":init_pose,
+                                "final_pose":final_pose,
+                                "init_img":init_img,
+                                "final_img":final_img, 
+                                "delta_gt": final_pose - init_pose})
+        
+    
+
+    save_location = f"{os.getcwd()}/training_data/{save_filename}.pt"
+    print(f"Saving data to {save_location}")
+    torch.save(data_dict, save_location)
+    return data_dict
+
+def load_normalized_data_dict(filename):
+    save_location = f"{os.getcwd()}/training_data/{filename}.pt"
+    print(f"Loading data from {save_location}")
+    data_dict = torch.load(save_location)
+
+    delta_gt = torch.tensor([])
+    for i in range(len(data_dict)):
+        delta_gt = torch.cat((delta_gt, data_dict[i]["delta_gt"]), dim=0)
+    mean = torch.mean(delta_gt, dim=0)
+    std = torch.std(delta_gt, dim=0)
+
+    for i in range(len(data_dict)):
+        data_dict[i]["delta_gt"] = (data_dict[i]["delta_gt"] - mean)/std
+
+    return data_dict, mean, std
+
+
+
+def load_normalized_coarse_data_dict(filename):
+    save_location = f"{os.getcwd()}/training_data/{filename}.pt"
+    print(f"Loading data from {save_location}")
+    data_dict = torch.load(save_location)
+
+    delta_gt = torch.tensor([])
+    init_poses = torch.tensor([])
+    for i in range(len(data_dict)):
+        init_poses = torch.cat((init_poses, data_dict[i]["init_pose"]), dim=0)
+        delta_gt = torch.cat((delta_gt, data_dict[i]["delta_gt"]), dim=0)
+    mean_delta_gt = torch.mean(delta_gt, dim=0)
+    std_delta_gt = torch.std(delta_gt, dim=0)
+
+    mean_init_pose = torch.mean(init_poses, dim=0)
+    std_init_pose = torch.std(init_poses, dim=0)
+
+
+    for i in range(len(data_dict)):
+        data_dict[i]["init_pose"] = (data_dict[i]["init_pose"] - mean_init_pose)/std_init_pose
+        data_dict[i]["delta_gt"] = (data_dict[i]["delta_gt"] - mean_delta_gt)/std_delta_gt
+
+    return data_dict, mean_init_pose, std_init_pose, mean_delta_gt, std_delta_gt
 
 def quat2rot(quat):
     '''

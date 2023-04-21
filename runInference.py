@@ -38,9 +38,10 @@ def test(net, pose_net, val_data, loss_fn, cfg, csv_writer):
             action_vector = data['action_vector'].to(device)
 
             embeddings = net(init_img, action_vector, init_pose)
-            predicted_pose = pose_net(embeddings)
-            for i in range(predicted_pose.shape[0]):
-                row = make_inference_row(action_vector[i], init_pose[i], final_pose[i], predicted_pose[i])
+            delta_predicted = pose_net(embeddings)
+            delta_gt = data['delta_gt'].to(device)
+            for i in range(delta_predicted.shape[0]):
+                row = make_inference_row(action_vector[i], init_pose[i], delta_gt[i], delta_predicted[i])
                 csv_writer.writerow(row)
 
 
@@ -67,7 +68,12 @@ if __name__ == "__main__":
             print("Data preprocessing done !")
     
     print("Loading data...")
-    train_data, test_data = load_data_dict(cfg['fine_training']['save_filename'], cfg['data']['train_split'])
+    data_dict, init_mean, init_std, delta_gt_mean, delta_gt_std = load_normalized_coarse_data_dict(cfg['fine_training']['save_filename'])
+    data_split = cfg['data']['train_split']
+    train_data, test_data = torch.utils.data.random_split(
+                            data_dict,
+                                [int(data_split*len(data_dict)), len(data_dict)-int(data_split*len(data_dict))], 
+                                generator=torch.Generator().manual_seed(42))   
     if cfg['verbose']:
         print("Data loaded !")
     
@@ -75,7 +81,7 @@ if __name__ == "__main__":
     # load the weights from the encoder
     net.load_state_dict(torch.load(cfg['fine_training']['encoder_weights']))
     net.eval()
-
+    # import ipdb; ipdb.set_trace()
     pose_net = PoseNet(cfg).to(device)
     pose_net.load_state_dict(torch.load(cfg['fine_training']['pose_weights']))
     loss_fn = torch.nn.MSELoss()
@@ -87,6 +93,6 @@ if __name__ == "__main__":
     inference_file_path = f"{cfg['fine_training']['inference_dir']}/inference_{timestamp}.csv"
     with open(inference_file_path, 'w') as f:
         csv_writer = csv.writer(f)
-        csv_writer.writerow(['action_vector', 'init_pose', 'final_pose', 'predicted_pose'])
+        csv_writer.writerow(['action_vector', 'init_pose', 'delta_gt', 'delta_predicted'])
         test(net, pose_net, test_data, loss_fn, cfg, csv_writer)
 
