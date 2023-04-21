@@ -131,9 +131,8 @@ class GenerateData():
         # sample block poses
         block_dims = [self.block.sx,self.block.sy,self.block.sz]
         # actions = ['PokeX', 'PokeY', 'PokeTop' ,'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        # actions = ['PokeFrontRE', 'PokeFrontLE']
-        # actions = ['PokeTop', 'PokeX', 'PokeY']
-        actions = ['PokeTop']
+        actions = ['PokeTop', 'PokeX', 'PokeY', 'PokeFrontRE', 'PokeFrontLE']
+        # actions = ['PokeFrontRE']
         action = actions[np.random.randint(0, len(actions))]
         if action == 'PokeX':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
@@ -249,11 +248,11 @@ if __name__=='__main__':
 
     # data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
 
-    # data_generater = GenerateData(cfg,object_type='long_cube')
+    # data_generater = GenerateData(cfg,object_type='std_cube')
     # data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
 
     data_generater = GenerateData(cfg,object_type='high_cube')
     data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
 
-    
+
 

@@ -266,7 +266,7 @@ class PokePolicy(Policy):
         self._franka_name = franka_name
         self._block = block
         self._block_name = block_name
-        self._time_horizon = 600 
+        self._time_horizon = 700 
         self.reset()
 
     def reset(self):
@@ -318,7 +318,7 @@ class PokePolicy(Policy):
         
         if t_step==500:
             self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, self._pre_poke_transforms[env_idx], self._init_ee_transforms[env_idx], T=100
+                self._franka, self._franka_name, self._pre_poke_transforms[env_idx], self._init_ee_transforms[env_idx], T=200
             )
         self._ee_waypoint_policies[env_idx](scene, env_idx, t_step, t_sim)
 
@@ -414,21 +414,24 @@ class PokeFrontPolicy(PokePolicy):
         return gymapi.Transform(p=block_transform.p, r=self._init_ee_transforms[env_idx].r)
 
     def _get_pre_poke_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.1, 0, 0), r=poke_transform.r)
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.15, 0, -0.03 ), r=poke_transform.r)
     
     def _get_poke_final_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.1, 0, 0), r=poke_transform.r)
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.2, 0, -0.03), r=poke_transform.r)
 
 
 class PokeSidePolicy(PokePolicy):
+    def __init__(self, franka, franka_name, block, block_name, block_dims, *args, **kwargs):
+        super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
+        self._block_dims = block_dims
     def _get_poke_transform(self, block_transform, env_idx):
         return gymapi.Transform(p=block_transform.p, r=self._init_ee_transforms[env_idx].r)
 
     def _get_pre_poke_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, -0.1, 0), r=poke_transform.r)
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, -0.1 - self._block_dims[1]/2, 0), r=poke_transform.r)
     
     def _get_poke_final_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, 0.1, 0), r=poke_transform.r)
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, 0.15, 0), r=poke_transform.r)
 
 
 class TopplePolicy(PokePolicy):
@@ -436,13 +439,41 @@ class TopplePolicy(PokePolicy):
         super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
         self._block_dims = block_dims
     def _get_poke_transform(self, block_transform, env_idx):
-        return gymapi.Transform(p=block_transform.p +gymapi.Vec3(0, 0, self._block_dims[2]/5) , r=self._init_ee_transforms[env_idx].r)
+        return gymapi.Transform(p=block_transform.p +gymapi.Vec3(0, 0, self._block_dims[2]/10) , r=self._init_ee_transforms[env_idx].r)
 
     def _get_pre_poke_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.1, 0, self._block_dims[2]/5), r=poke_transform.r)
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.15, 0, self._block_dims[2]/10), r=poke_transform.r)
     
     def _get_poke_final_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.1, 0, self._block_dims[2]/5), r=poke_transform.r)
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.15, 0, self._block_dims[2]/10), r=poke_transform.r)
+
+# Push from Right end 
+class PushFrontREPolicy(PokePolicy):
+    def __init__(self, franka, franka_name, block, block_name, block_dims, *args, **kwargs):
+        super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
+        self._block_dims = block_dims
+    def _get_poke_transform(self, block_transform, env_idx):
+        return gymapi.Transform(p=block_transform.p +gymapi.Vec3(0, self._block_dims[1]/5, -0.01) , r=self._init_ee_transforms[env_idx].r)
+
+    def _get_pre_poke_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.15, self._block_dims[1]/5, -0.01), r=poke_transform.r)
+    
+    def _get_poke_final_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.3, self._block_dims[1]/5, -0.01), r=poke_transform.r)
+
+
+class PushFrontLEPolicy(PokePolicy):
+    def __init__(self, franka, franka_name, block, block_name, block_dims, *args, **kwargs):
+        super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
+        self._block_dims = block_dims
+    def _get_poke_transform(self, block_transform, env_idx):
+        return gymapi.Transform(p=block_transform.p +gymapi.Vec3(0, -self._block_dims[1]/5, -0.01) , r=self._init_ee_transforms[env_idx].r)
+
+    def _get_pre_poke_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.15, -self._block_dims[1]/5, -0.01), r=poke_transform.r)
+    
+    def _get_poke_final_transform(self, poke_transform, env_idx):
+        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.3, -self._block_dims[1]/5, -0.01), r=poke_transform.r)
 
 
 class GraspFrontPolicy(GraspPolicy):

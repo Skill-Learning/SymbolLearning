@@ -1,5 +1,5 @@
 scene:
-  n_envs: 25
+  n_envs: 1
   es: 1
   gui: 1
   cam:
@@ -15,7 +15,7 @@ scene:
       num_inner_iterations: 30
       relaxation: 0.75
       warm_start: 0.8
-      shape_collision_margin: 1e-3
+      shape_collision_margin: 1e-2
       contact_regularization: 1e-7
       deterministic_mode: True
     device:
@@ -42,11 +42,11 @@ franka:
 
 table:
   dims:
-    sx: 1
-    sy: 1
+    sx: 2
+    sy: 2
     sz: 0.5
   shape_props:
-    friction: 0.1
+    friction: 0.1 #0.1
     rolling_friction: 0
     torsion_friction: 0
     thickness: 2e-3
@@ -61,10 +61,10 @@ block:
   high_dims:
     sx: 0.05
     sy: 0.05
-    sz: 0.15
+    sz: 0.25
   long_dims:
-    sx: 0.05
-    sy: 0.15
+    sx: 0.1
+    sy: 0.4
     sz: 0.05
   wide_dims:
     sx: 0.15
@@ -73,13 +73,13 @@ block:
 
 
   shape_props:
-    friction: 0.2
+    friction: 0.5 # 0.5 for std_cube
     rolling_friction: 0.01
-    torsion_friction: 0.01
+    torsion_friction: 0.05
     thickness: 2e-3
   rb_props:
     flags: none # can be none, no_sim, no_gravity
-    color: [0.2, 0.7, 0.2]
+    color: [0.078,0.353,0.667]
   asset_options:
     density: 1000
 
@@ -89,24 +89,42 @@ camera:
 
 num_cameras: 1
 
-
 # ______________________________________________________________________________
 # Learning Parameters
 
 device: cuda:0
-
+debug: False
+verbose: True
 image_encoder:
-  type: resnet18
-  pretrained: True
+  type: ResNet18
+  use_pretrained: True
   
 coarse_training:
   batch_size:
-    train: 32
+    train: 48
     val: 32
-  epochs: 100
-  lr: 0.001
+  epochs: 50
+  lr: 0.0001
+  metadata_size: 13
 
 data:
-  use_saved_data: False
-  filename: test
-  num_episodes: 3
+  use_saved_data: True
+  filename: synthetic_data_
+  train_split: 0.75
+  num_episodes: 300
+
+logging:
+  log_enable: True
+  comment: real_data_posenet
+
+fine_training:
+  batch_size:
+    train: 5
+    val: 5
+  epochs: 150
+  lr: 0.00002
+  use_saved_data: True
+  save_filename: real_data_resized
+  encoder_weights: checkpoints/synthetic_data__20221204_225624/18.pth
+  pose_weights: checkpoints/fine_training/real_data_resized_20221205_154924/34.pth
+  inference_dir: inference_files

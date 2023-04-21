@@ -72,7 +72,7 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10, return_feats=False):
+    def __init__(self, block, num_blocks, num_classes=10, return_feats=True):
         super(ResNet, self).__init__()
         self.in_planes = 64
 
@@ -83,7 +83,8 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        self.linear = nn.Linear(512*block.expansion, num_classes)
+        self.linear = nn.Linear(512*7*num_classes, 512)
+        # self.linear = nn.Linear(512*block.expansion, num_classes)
         self.return_feats = return_feats
 
     def _make_layer(self, block, planes, num_blocks, stride):
@@ -102,15 +103,15 @@ class ResNet(nn.Module):
         out = self.layer4(out)
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
-        embedding_feats = out # save embedding feats
         out = self.linear(out)
+        embedding_feats = out # save embedding feats
         if self.return_feats:
             return embedding_feats
         else:
             return out
 
 
-def ResNet18(num_classes = 10, return_feats = False):
+def ResNet18(num_classes = 10, return_feats = True):
     # Embedding size is 512
     return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, return_feats)
 
@@ -132,8 +133,10 @@ def ResNet152():
 
 
 def test():
+
     net = ResNet18()
-    y = net(torch.randn(1, 3, 32, 32))
+    input_img = torch.randn(1, 3, 224, 224)
+    y = net(input_img)
     print(y.size())
 
-test()
+# test()

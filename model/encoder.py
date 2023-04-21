@@ -4,12 +4,13 @@ will hopefully be a PN++ type encoder.'''
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-from resnet import ResNet18
+from .resnet import ResNet18
 from torchvision.models import resnet18, ResNet18_Weights
 from utils import *
 
 class Encoder(nn.Module):
     def __init__(self, cfg):
+        super(Encoder, self).__init__()
         self.cfg = cfg
 
         self.image_encoder = None
@@ -29,7 +30,7 @@ class Encoder(nn.Module):
         if self.image_encoder is None:
             raise ValueError('Invalid image encoder type')
 
-        self.metadata_size = self.cfg['metadata_size']
+        self.metadata_size = self.cfg['coarse_training']['metadata_size']
         # size = action_one_hot_size + initial_pose_size 
         self.metadata_encoder = nn.Sequential(nn.Linear(self.metadata_size, 256),
                                               nn.ReLU(),
@@ -42,7 +43,6 @@ class Encoder(nn.Module):
         # action_vector: [B, 5]
         # initial_pose: [B, 7]
         # output: [B, 512*2]
-
         img_embedding = self.image_encoder(initial_image)
         metadata = torch.cat((action_vector, initial_pose), dim=1)
         metadata_embedding = self.metadata_encoder(metadata)
