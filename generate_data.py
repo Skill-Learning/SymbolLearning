@@ -153,7 +153,7 @@ class GenerateData():
                 draw_camera(scene, [env_idx], self.camera_transforms[i], length = 0.04)
         draw_contacts(scene, scene.env_idxs)
     
-    def generate_point_cloud(self,block_transform,visualize=True):
+    def generate_point_cloud(self,block_transform,visualize=False):
     
         color_list, depth_list, seg_list, normal_list = [], [], [], []
         env_idx = 0
@@ -319,15 +319,10 @@ if __name__=='__main__':
     csv_path = f"./data/{curr_date}/data.csv"
 
     # import ipdb; ipdb.set_trace()
-    if(not os.path.exists(data_dir)):
-        try:
-            os.mkdir(data_dir)
-            print("*"*20+"Directory Created")
-
-            # os.mkdir(f"data/{curr_date}/images")
-        except OSError:
-            print (f"Creation of the directory data/{curr_date} failed")
-    
+    if not os.path.exists('./data'):
+        os.mkdir('./data')
+        os.mkdir(data_dir)
+        
     with open(csv_path, 'w') as f:
         writer = csv.writer(f)
         writer.writerow(header)
