@@ -71,19 +71,18 @@ class GenerateData():
             z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         
         self.block_transforms = [gymapi.Transform(p=gymapi.Vec3(
-            (np.random.rand()*2 - 1) * 0.1 + 0.6, 
-            (np.random.rand()*2 - 1) * 0.2,
+            (np.random.rand()*2 - 1) * 0.1 + 0.3, 
+            (np.random.rand()*2 - 1) * 0.2 + 0.1,
             z
         )) for _ in range(self.scene.n_envs)]
         # Add Cameras 
         self.camera = GymCamera(self.scene, cfg['camera'])
         self.camera_names  = [f"cam{i}" for i in range(cfg['num_cameras'])] #num cameras = 3
-
         self.camera_transforms = [
         # front
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[1.38, 0, self.block_transforms[0].p.z+0.01],
+                    translation=[1.38, 0, 0.725],
                     rotation=np.array([
                         [0, 0, -1],
                         [1, 0, 0],
@@ -110,20 +109,30 @@ class GenerateData():
                         [0, -1, 0]
                     ]) @ RigidTransform.x_axis_rotation(np.deg2rad(0))
             )),
-            #rear
+            #rearNegY(right)
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[self.franka_transform.p.x,self.block_transforms[0].p.y, self.block_transforms[0].p.z+0.01],
+                    translation=[self.franka_transform.p.x,-0.075-0.2, 0.725+0.01],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
                         [0, -1, 0]
-                    ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-90))
+                    ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-135))
+            )),
+            #rearPosY(left)
+            RigidTransform_to_transform(
+                RigidTransform(
+                    translation=[self.franka_transform.p.x,-0.075+0.6, 0.725+0.01],
+                    rotation=np.array([
+                        [-1, 0, 0],
+                        [0, 0, -1],
+                        [0, -1, 0]
+                    ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-45))
             )),
             #top
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[self.block_transforms[0].p.x,self.block_transforms[0].p.y, self.block_transforms[0].p.z+0.4],
+                    translation=[0.4,-0.075, 0.725+0.4],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
@@ -153,7 +162,7 @@ class GenerateData():
                 draw_camera(scene, [env_idx], self.camera_transforms[i], length = 0.04)
         draw_contacts(scene, scene.env_idxs)
     
-    def generate_point_cloud(self,block_transform,visualize=False):
+    def generate_point_cloud(self,block_transform,visualize=True):
     
         color_list, depth_list, seg_list, normal_list = [], [], [], []
         env_idx = 0
@@ -196,7 +205,15 @@ class GenerateData():
 
             loc_x=np.where(points[:,0]>block_transform.p.x-0.025,True,False)
             points=points[loc_x]
-            
+
+            loc_x=np.where(points[:,0]<0.9,True,False)
+            points=points[loc_x]
+
+            loc_y=np.where(points[:,1]>-0.075-0.2,True,False)
+            points=points[loc_y]
+
+            loc_y=np.where(points[:,1]<-0.075+0.5,True,False)
+            points=points[loc_y]
 
             point_cloud.append(points)
             
@@ -204,7 +221,7 @@ class GenerateData():
         point_cloud=np.concatenate(point_cloud)
         pcd=o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(point_cloud)
-        downsampled_pcd = pcd.voxel_down_sample(voxel_size=0.003)
+        downsampled_pcd = pcd.voxel_down_sample(voxel_size=0.005)
 
         if visualize:
             for camera_pose in camera_poses:
@@ -263,6 +280,7 @@ class GenerateData():
         # Collect Object data 
         
         # * Pose: [p[x,y,z] r[x,y,z,w]]
+        # import ipdb;ipdb.set_trace()
 
         initial_poses = []
         point_clouds = []
@@ -273,7 +291,7 @@ class GenerateData():
         for i,env_idx in enumerate(self.scene.env_idxs):
             initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
             self.scene.render_cameras()
-            pc = self.generate_point_cloud(self.block_transforms[i])
+            pc = self.generate_point_cloud(self.block_transforms[i], visualize=cfg['flags']['visualize'])
             point_clouds.append(pc)
 
         initial_poses = np.array(initial_poses)
@@ -291,7 +309,7 @@ class GenerateData():
         final_poses = torch.tensor(final_poses)
         return  initial_poses, point_clouds, final_poses, action_vec, self.object_type
         
-    def generate_data(self, num_episodes, csv_writer, save_data=True):
+    def generate_data(self, num_episodes, csv_writer, save_data=False):
         for i in range(num_episodes):
             initial_poses, point_clouds, final_poses, action_vec, obj_type= self.run_episode()
             
@@ -321,6 +339,7 @@ if __name__=='__main__':
     # import ipdb; ipdb.set_trace()
     if not os.path.exists('./data'):
         os.mkdir('./data')
+    if not os.path.exists(data_dir):
         os.mkdir(data_dir)
         
     with open(csv_path, 'w') as f:
@@ -328,7 +347,7 @@ if __name__=='__main__':
         writer.writerow(header)
 
         data_generater = GenerateData(cfg,object_type='high_cube')
-        data_generater.generate_data(cfg['data']['num_episodes'], csv_writer=writer)
+        data_generater.generate_data(cfg['data']['num_episodes'], csv_writer=writer, save_data=cfg['flags']['save_data'])
     
     f.close()
 

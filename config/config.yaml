@@ -1,5 +1,9 @@
+flags:
+  visualize: True
+  save_data: False
+
 scene:
-  n_envs: 10
+  n_envs: 3
   es: 1
   gui: 1
   cam:
@@ -87,7 +91,7 @@ camera:
   width: 320
   height: 240
 
-num_cameras: 5
+num_cameras: 6
 
 # ______________________________________________________________________________
 # Learning Parameters
