@@ -1,5 +1,5 @@
 flags:
-  visualize: True
+  visualize: False
   save_data: False
 
 scene:
@@ -74,8 +74,6 @@ block:
     sx: 0.15
     sy: 0.05
     sz: 0.05
-
-
   shape_props:
     friction: 0.5 # 0.5 for std_cube
     rolling_friction: 0.01
@@ -87,6 +85,17 @@ block:
   asset_options:
     density: 1000
 
+urdf:
+  urdf_path: pybullet/mug/model.urdf
+  shape_props:
+    friction: 0.2
+    rolling_friction: 0.01
+    torsion_friction: 0.01
+    thickness: 2e-3
+  rb_props:
+    texture: pybullet/mug/texture_map.png
+  asset_options:
+    density: 500
 camera:
   width: 320
   height: 240

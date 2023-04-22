@@ -8,7 +8,7 @@ import os
 import csv
 from isaacgym import gymapi
 from isaacgym_utils.scene import GymScene
-from isaacgym_utils.assets import GymFranka, GymBoxAsset
+from isaacgym_utils.assets import GymFranka, GymBoxAsset, GymURDFAsset
 from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
 from policy import *
@@ -36,7 +36,7 @@ def vis_cam_images(image_list):
     plt.show()
 
 class GenerateData():
-    def __init__(self, cfg, object_type="std_cube"):
+    def __init__(self, cfg, object_type="urdf"):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.object_type = object_type
     # Create Environment 
@@ -70,6 +70,14 @@ class GenerateData():
         else:
             z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         
+        if self.object_type == "urdf":
+            self.block = GymURDFAsset(
+                            cfg['urdf']['urdf_path'],
+                            self.scene, 
+                            shape_props=cfg['urdf']['shape_props'],
+                            rb_props=cfg['urdf']['rb_props'],
+                        )
+
         self.block_transforms = [gymapi.Transform(p=gymapi.Vec3(
             (np.random.rand()*2 - 1) * 0.1 + 0.3, 
             (np.random.rand()*2 - 1) * 0.2 + 0.1,
@@ -239,7 +247,7 @@ class GenerateData():
 
     def run_episode(self):
         # sample block poses
-        block_dims = [self.block.sx,self.block.sy,self.block.sz]
+        # block_dims = [self.block.sx,self.block.sy,self.block.sz]
         # actions = ['PokeX', 'PokeY', 'PokeTop' ,'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
         # actions = ['PokeFrontRE', 'PokeFrontLE']
         # actions = ['PokeTop', 'PokeX', 'PokeY']
@@ -248,27 +256,12 @@ class GenerateData():
         if action == 'PokeX':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
             action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
-        elif action == 'PokeY':
-            policy = PokeSidePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 1, 0, 0, 0, 0])
-        elif action == 'PokeFrontRE':
-            policy = PushFrontREPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 0, 1, 0, 0, 0])
-        elif action == 'PokeFrontLE':
-            policy = PushFrontLEPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
         elif action == 'PokeTop':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            if(self.object_type == "high_cube"):
-                policy = TopplePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
             action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         # elif action == 'GraspSide':
         #     policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
         #     action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
-        elif action == 'Testing':
-            '''This is just a random condition to test the environment, move to the hardcoded position'''
-            policy = PushFrontLEPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         else:
             raise ValueError(f"Invalid action {action}")
 
@@ -346,7 +339,7 @@ if __name__=='__main__':
         writer = csv.writer(f)
         writer.writerow(header)
 
-        data_generater = GenerateData(cfg,object_type='high_cube')
+        data_generater = GenerateData(cfg,object_type='urdf')
         data_generater.generate_data(cfg['data']['num_episodes'], csv_writer=writer, save_data=cfg['flags']['save_data'])
     
     f.close()
