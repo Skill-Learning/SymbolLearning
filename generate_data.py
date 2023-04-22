@@ -221,21 +221,22 @@ class GenerateData():
         point_cloud=np.concatenate(point_cloud)
         pcd=o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(point_cloud)
-        downsampled_pcd = pcd.voxel_down_sample(voxel_size=0.005)
+        pcd = pcd.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
+        pcd=pcd.farthest_point_down_sample(cfg['point_cloud']['num_points'])
 
         if visualize:
             for camera_pose in camera_poses:
                 vis3d.pose(camera_pose)
 
             vis3d.points(
-                    downsampled_pcd.points, 
+                    pcd.points, 
                     color=cm.tab10.colors[i],
                     scale=0.005
                 )
 
             vis3d.show()
 
-        return downsampled_pcd
+        return pcd
 
     def run_episode(self):
         # sample block poses
