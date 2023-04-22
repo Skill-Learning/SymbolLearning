@@ -221,8 +221,14 @@ class GenerateData():
         point_cloud=np.concatenate(point_cloud)
         pcd=o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(point_cloud)
+        
+        #Downsampling PointCloud
         pcd = pcd.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
         pcd=pcd.farthest_point_down_sample(cfg['point_cloud']['num_points'])
+        
+        #Compute normals
+        pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+        pcd_normals=np.asarray(pcd.normals)
 
         if visualize:
             for camera_pose in camera_poses:
@@ -236,7 +242,7 @@ class GenerateData():
 
             vis3d.show()
 
-        return pcd
+        return pcd, pcd_normals
 
     def run_episode(self):
         # sample block poses
@@ -285,6 +291,7 @@ class GenerateData():
 
         initial_poses = []
         point_clouds = []
+        normals=[]
         policy.reset()
         for _ in range(100):
             self.scene.step()
@@ -292,12 +299,12 @@ class GenerateData():
         for i,env_idx in enumerate(self.scene.env_idxs):
             initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
             self.scene.render_cameras()
-            pc = self.generate_point_cloud(self.block_transforms[i], visualize=cfg['flags']['visualize'])
+            pc, pc_normal = self.generate_point_cloud(self.block_transforms[i], visualize=cfg['flags']['visualize'])
             point_clouds.append(pc)
+            normals.append(pc_normal)
 
         initial_poses = np.array(initial_poses)
         initial_poses = torch.tensor(initial_poses)
-
 
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
         
@@ -308,11 +315,11 @@ class GenerateData():
 
         final_poses = np.array(final_poses)
         final_poses = torch.tensor(final_poses)
-        return  initial_poses, point_clouds, final_poses, action_vec, self.object_type
+        return  initial_poses, point_clouds, final_poses, action_vec, self.object_type, normals
         
     def generate_data(self, num_episodes, csv_writer, save_data=False):
         for i in range(num_episodes):
-            initial_poses, point_clouds, final_poses, action_vec, obj_type= self.run_episode()
+            initial_poses, point_clouds, final_poses, action_vec, obj_type, normals = self.run_episode()
             
             if save_data:
                 for env_idx in self.scene.env_idxs:
