@@ -1,7 +1,7 @@
 import argparse
 import gym
 import numpy as np
-from autolab_core import YamlConfig, RigidTransform
+from autolab_core import YamlConfig, RigidTransform, PointCloud
 import matplotlib.pyplot as plt
 from datetime import datetime
 import os
@@ -17,6 +17,9 @@ import time
 from visualization.visualizer3d import Visualizer3D as vis3d
 import torch
 from utils import *
+import open3d as o3d
+from matplotlib import cm
+
 
 # TODO: Policy Class 
 # TODO: utils.py -> Observation Collection Class -> this collects pcd or image 
@@ -31,13 +34,6 @@ def vis_cam_images(image_list):
             im = im / 2 + 0.5
         plt.imshow(im)
     plt.show()
-
-
-def subsample(pts, rate):
-    n = int(rate * len(pts))
-    idxs = np.arange(len(pts))
-    np.random.shuffle(idxs)
-    return pts[idxs[:n]]
 
 class GenerateData():
     def __init__(self, cfg, object_type="std_cube"):
@@ -74,37 +70,58 @@ class GenerateData():
         self.camera = GymCamera(self.scene, cfg['camera'])
         self.camera_names  = [f"cam{i}" for i in range(cfg['num_cameras'])] #num cameras = 3
 
-        self.camera_transforms = [
+        self.cam_transforms = [
+        # front
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[1.38, 0, 1],
+                    translation=[1.38, 0, self.block_transform.p.z+0.01],
                     rotation=np.array([
                         [0, 0, -1],
                         [1, 0, 0],
                         [0, -1, 0]
-                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(0))
             )),
-            # # left
-            # RigidTransform_to_transform(
-            #     RigidTransform(
-            #         translation=[0.5, -0.8, 1],
-            #         rotation=np.array([
-            #             [1, 0, 0],
-            #             [0, 0, 1],
-            #             [0, -1, 0]
-            #         ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
-            # )),
-            # # right
-            # RigidTransform_to_transform(
-            #     RigidTransform(
-            #         translation=[0.5, 0.8, 1],
-            #         rotation=np.array([
-            #             [-1, 0, 0],
-            #             [0, 0, -1],
-            #             [0, -1, 0]
-            #         ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-30))
-            # ))
+            # left
+            RigidTransform_to_transform(
+                RigidTransform(
+                    translation=[0.5, -0.8, self.franka_transform.p.z+0.05],
+                    rotation=np.array([
+                        [1, 0, 0],
+                        [0, 0, 1],
+                        [0, -1, 0]
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(0))
+            )),
+            # right
+            RigidTransform_to_transform(
+                RigidTransform(
+                    translation=[0.5, 0.8, self.franka_transform.p.z+0.05],
+                    rotation=np.array([
+                        [-1, 0, 0],
+                        [0, 0, -1],
+                        [0, -1, 0]
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(0))
+            )),
+            RigidTransform_to_transform(
+                RigidTransform(
+                    translation=[self.franka_transform.p.x,self.franka_transform.p.y, self.franka_transform.p.z+0.05],
+                    rotation=np.array([
+                        [-1, 0, 0],
+                        [0, 0, -1],
+                        [0, -1, 0]
+                    ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-90))
+            )),
+            #top
+            RigidTransform_to_transform(
+                RigidTransform(
+                    translation=[self.block_transform.p.x,self.block_transform.p.y, self.block_transform.p.z+0.2],
+                    rotation=np.array([
+                        [-1, 0, 0],
+                        [0, 0, -1],
+                        [0, -1, 0]
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-90))
+            ))
         ]
+        
         assert len(self.camera_transforms) == cfg['num_cameras'], "Number of camera transforms must match number of cameras"
         def setup(scene, _):
             self.scene.add_asset('table', self.table, self.table_transform)
@@ -126,6 +143,67 @@ class GenerateData():
                 draw_camera(scene, [env_idx], self.camera_transforms[i], length = 0.04)
         draw_contacts(scene, scene.env_idxs)
     
+    def generate_point_cloud(self,block_transform,visualize=True):
+    
+        color_list, depth_list, seg_list, normal_list = [], [], [], []
+        env_idx = 0
+        for cam_name in self.camera_names:
+            # get images of cameras in first env 
+            frames = self.camera.frames(env_idx, cam_name)
+            color_list.append(frames['color'])
+            depth_list.append(frames['depth'])
+            seg_list.append(frames['seg'])
+            normal_list.append(frames['normal'])
+        
+        intrs = [self.camera.get_intrinsics(cam_name) for cam_name in self.camera_names]
+
+        # Deproject to point clouds
+        pcs_cam = []
+        for i, depth in enumerate(depth_list):
+            pc_raw = intrs[i].deproject(depth)
+            points_filtered = pc_raw.data[:, np.logical_not(np.any(pc_raw.data > 5, axis=0))]
+            pcs_cam.append(PointCloud(points_filtered, pc_raw.frame))
+
+        # Get camera poses
+        camera_poses = [
+            self.camera.get_extrinsics(env_idx, cam_name)
+            for cam_name in self.camera_names
+        ]
+
+        # Transform point clouds from camera frame into world frame
+        pcs_world = [camera_poses[i] * pc for i, pc in enumerate(pcs_cam)]
+
+        point_cloud=[]
+        for i, pc in enumerate(pcs_world):
+
+            points=pc.data.T
+            loc_z=np.where(points[:,2]>0.508,True,False)
+            points=points[loc_z]
+
+            loc_x=np.where(points[:,0]>block_transform.p.x-0.05,True,False)
+            points=points[loc_x]
+
+            point_cloud.append(points)
+            
+        
+        point_cloud=np.concatenate(point_cloud)
+        pcd=o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(point_cloud)
+        downsampled_pcd = pcd.voxel_down_sample(voxel_size=0.003)
+
+        if visualize:
+            for camera_pose in camera_poses:
+                vis3d.pose(camera_pose)
+
+            vis3d.points(
+                    downsampled_pcd.points, 
+                    color=cm.tab10.colors[i],
+                    scale=0.005
+                )
+
+            vis3d.show()
+
+        return np.asarray(downsampled_pcd.points)
 
     def run_episode(self):
         # sample block poses
@@ -166,6 +244,7 @@ class GenerateData():
             z = cfg['table']['dims']['sz'] + cfg['block']['high_dims']['sz'] / 2 + 0.1
         else:
             z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
+        
         block_transforms = [gymapi.Transform(p=gymapi.Vec3(
             (np.random.rand()*2 - 1) * 0.1 + 0.4, 
             (np.random.rand()*2 - 1) * 0.2,
@@ -182,18 +261,20 @@ class GenerateData():
         # * Pose: [p[x,y,z] r[x,y,z,w]]
 
         initial_poses = []
-        initial_images = []
+        point_clouds = []
         policy.reset()
         for _ in range(100):
             self.scene.step()
         self.scene.render_cameras()
-        for env_idx in self.scene.env_idxs:
+        for i,env_idx in enumerate(self.scene.env_idxs):
             initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
-            img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
-            img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
-            initial_images.append(img)
+            self.scene.render_cameras()
+            pc = self.generate_point_cloud(block_transforms[i])
+            point_clouds.append(pc)
+
         initial_poses = np.array(initial_poses)
         initial_poses = torch.tensor(initial_poses)
+
 
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
         
@@ -202,21 +283,23 @@ class GenerateData():
         self.scene.render_cameras()
         for env_idx in self.scene.env_idxs:
             final_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
-            img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
-            img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
-            final_images.append(img)
+            # img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
+            # img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
+            # final_images.append(img)
         final_poses = np.array(final_poses)
         final_poses = torch.tensor(final_poses)
-        return initial_images, initial_poses, final_images, final_poses, action_vec, self.object_type
+        return  initial_poses, point_clouds, final_poses, action_vec, self.object_type
         
-    def generate_data(self, num_episodes, csv_path, data_dir):
+    def generate_data(self, num_episodes, csv_path, data_dir, save_data=True):
         for i in range(num_episodes):
-            initial_images, initial_poses, final_images, final_poses, action_vec, obj_type= self.run_episode()
-            for env_idx in self.scene.env_idxs:
-                row = make_data_row(i, action_vec, initial_poses[env_idx], initial_images[env_idx], final_poses[env_idx], final_images[env_idx], data_dir, env_idx, obj_type= obj_type)
-                with open(csv_path, 'a') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(row)
+            initial_poses, point_clouds, final_poses, action_vec, obj_type= self.run_episode()
+            
+            if save_data:
+                for env_idx in self.scene.env_idxs:
+                    row = make_data_row(i, action_vec, initial_poses[env_idx], point_clouds[env_idx], final_poses[env_idx], data_dir, env_idx, obj_type= obj_type)
+                    with open(csv_path, 'a') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(row)
 
 
 if __name__=='__main__':

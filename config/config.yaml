@@ -87,7 +87,7 @@ camera:
   width: 320
   height: 240
 
-num_cameras: 1
+num_cameras: 5
 
 # ______________________________________________________________________________
 # Learning Parameters
