@@ -65,16 +65,25 @@ class GenerateData():
         self.table_transform = gymapi.Transform(p=gymapi.Vec3(cfg['table']['dims']['sx']/3, 0, cfg['table']['dims']['sz']/2))
         self.franka_transform = gymapi.Transform(p=gymapi.Vec3(0, 0, cfg['table']['dims']['sz'] + 0.01))
 
+        if(self.object_type == "high_cube"):
+            z = cfg['table']['dims']['sz'] + cfg['block']['high_dims']['sz'] / 2 + 0.1
+        else:
+            z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         
+        self.block_transforms = [gymapi.Transform(p=gymapi.Vec3(
+            (np.random.rand()*2 - 1) * 0.1 + 0.4, 
+            (np.random.rand()*2 - 1) * 0.2,
+            z
+        )) for _ in range(self.scene.n_envs)]
         # Add Cameras 
         self.camera = GymCamera(self.scene, cfg['camera'])
         self.camera_names  = [f"cam{i}" for i in range(cfg['num_cameras'])] #num cameras = 3
 
-        self.cam_transforms = [
+        self.camera_transforms = [
         # front
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[1.38, 0, self.block_transform.p.z+0.01],
+                    translation=[1.38, 0, self.block_transforms[0].p.z+0.01],
                     rotation=np.array([
                         [0, 0, -1],
                         [1, 0, 0],
@@ -113,7 +122,7 @@ class GenerateData():
             #top
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[self.block_transform.p.x,self.block_transform.p.y, self.block_transform.p.z+0.2],
+                    translation=[self.block_transforms[0].p.x,self.block_transforms[0].p.y, self.block_transforms[0].p.z+0.23],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
@@ -177,8 +186,12 @@ class GenerateData():
         for i, pc in enumerate(pcs_world):
 
             points=pc.data.T
-            loc_z=np.where(points[:,2]>0.508,True,False)
+            loc_z=np.where(points[:,2]>0.508 ,True,False)
             points=points[loc_z]
+
+            loc_z=np.where(points[:,2]<block_transform.p.z+0.01 ,True,False)
+            points=points[loc_z]
+
 
             loc_x=np.where(points[:,0]>block_transform.p.x-0.05,True,False)
             points=points[loc_x]
@@ -240,20 +253,9 @@ class GenerateData():
         else:
             raise ValueError(f"Invalid action {action}")
 
-        if(self.object_type == "high_cube"):
-            z = cfg['table']['dims']['sz'] + cfg['block']['high_dims']['sz'] / 2 + 0.1
-        else:
-            z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
-        
-        block_transforms = [gymapi.Transform(p=gymapi.Vec3(
-            (np.random.rand()*2 - 1) * 0.1 + 0.4, 
-            (np.random.rand()*2 - 1) * 0.2,
-            z
-        )) for _ in range(self.scene.n_envs)]
-
         # set block poses
         for env_idx in self.scene.env_idxs:
-            self.block.set_rb_transforms(env_idx, self.block_name, [block_transforms[env_idx]])
+            self.block.set_rb_transforms(env_idx, self.block_name, [self.block_transforms[env_idx]])
 
         
         # Collect Object data 
@@ -269,7 +271,7 @@ class GenerateData():
         for i,env_idx in enumerate(self.scene.env_idxs):
             initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
             self.scene.render_cameras()
-            pc = self.generate_point_cloud(block_transforms[i])
+            pc = self.generate_point_cloud(self.block_transforms[i])
             point_clouds.append(pc)
 
         initial_poses = np.array(initial_poses)
@@ -318,13 +320,13 @@ if __name__=='__main__':
     curr_date = datetime.now().strftime("%Y%m%d")
     csv_path = f"data/{curr_date}/data.csv"
     data_dir = os.getcwd() + f"/data/{curr_date}"
-    if(not os.path.exists(f"data/{curr_date}")):
+    if(not os.path.exists(data_dir)):
         try:
-            os.mkdir(f"data/{curr_date}")
+            os.mkdir(data_dir)
             with open(csv_path, 'w') as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
-            os.mkdir(f"data/{curr_date}/images")
+            # os.mkdir(f"data/{curr_date}/images")
         except OSError:
             print (f"Creation of the directory data/{curr_date} failed")
 
