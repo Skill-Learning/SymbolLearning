@@ -71,7 +71,7 @@ class GenerateData():
             z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         
         self.block_transforms = [gymapi.Transform(p=gymapi.Vec3(
-            (np.random.rand()*2 - 1) * 0.1 + 0.4, 
+            (np.random.rand()*2 - 1) * 0.1 + 0.6, 
             (np.random.rand()*2 - 1) * 0.2,
             z
         )) for _ in range(self.scene.n_envs)]
@@ -110,9 +110,10 @@ class GenerateData():
                         [0, -1, 0]
                     ]) @ RigidTransform.x_axis_rotation(np.deg2rad(0))
             )),
+            #rear
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[self.franka_transform.p.x,self.franka_transform.p.y, self.franka_transform.p.z+0.05],
+                    translation=[self.franka_transform.p.x,self.block_transforms[0].p.y, self.block_transforms[0].p.z+0.01],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
@@ -122,7 +123,7 @@ class GenerateData():
             #top
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[self.block_transforms[0].p.x,self.block_transforms[0].p.y, self.block_transforms[0].p.z+0.23],
+                    translation=[self.block_transforms[0].p.x,self.block_transforms[0].p.y, self.block_transforms[0].p.z+0.4],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
@@ -189,12 +190,13 @@ class GenerateData():
             loc_z=np.where(points[:,2]>0.508 ,True,False)
             points=points[loc_z]
 
-            loc_z=np.where(points[:,2]<block_transform.p.z+0.01 ,True,False)
+            loc_z=np.where(points[:,2]<block_transform.p.z+0.125 ,True,False)
             points=points[loc_z]
 
 
-            loc_x=np.where(points[:,0]>block_transform.p.x-0.05,True,False)
+            loc_x=np.where(points[:,0]>block_transform.p.x-0.025,True,False)
             points=points[loc_x]
+            
 
             point_cloud.append(points)
             
@@ -216,7 +218,7 @@ class GenerateData():
 
             vis3d.show()
 
-        return np.asarray(downsampled_pcd.points)
+        return downsampled_pcd
 
     def run_episode(self):
         # sample block poses
@@ -281,27 +283,22 @@ class GenerateData():
         self.scene.run(time_horizon=policy.time_horizon, policy=policy, custom_draws=self.custom_draws)
         
         final_poses = []
-        final_images = []
         self.scene.render_cameras()
         for env_idx in self.scene.env_idxs:
             final_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
-            # img = self.camera.frames(env_idx, self.camera_names[0], True, False, False, False)['color'].raw_data
-            # img = torch.from_numpy(img).permute(2, 0, 1)/float(255.0)
-            # final_images.append(img)
+
         final_poses = np.array(final_poses)
         final_poses = torch.tensor(final_poses)
         return  initial_poses, point_clouds, final_poses, action_vec, self.object_type
         
-    def generate_data(self, num_episodes, csv_path, data_dir, save_data=True):
+    def generate_data(self, num_episodes, csv_writer, save_data=True):
         for i in range(num_episodes):
             initial_poses, point_clouds, final_poses, action_vec, obj_type= self.run_episode()
             
             if save_data:
                 for env_idx in self.scene.env_idxs:
                     row = make_data_row(i, action_vec, initial_poses[env_idx], point_clouds[env_idx], final_poses[env_idx], data_dir, env_idx, obj_type= obj_type)
-                    with open(csv_path, 'a') as f:
-                        writer = csv.writer(f)
-                        writer.writerow(row)
+                    csv_writer.writerow(row)
 
 
 if __name__=='__main__':
@@ -318,27 +315,27 @@ if __name__=='__main__':
 
 
     curr_date = datetime.now().strftime("%Y%m%d")
-    csv_path = f"data/{curr_date}/data.csv"
-    data_dir = os.getcwd() + f"/data/{curr_date}"
+    data_dir = f"./data/{curr_date}"
+    csv_path = f"./data/{curr_date}/data.csv"
+
+    # import ipdb; ipdb.set_trace()
     if(not os.path.exists(data_dir)):
         try:
             os.mkdir(data_dir)
-            with open(csv_path, 'w') as f:
-                writer = csv.writer(f)
-                writer.writerow(header)
+            print("*"*20+"Directory Created")
+
             # os.mkdir(f"data/{curr_date}/images")
         except OSError:
             print (f"Creation of the directory data/{curr_date} failed")
+    
+    with open(csv_path, 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
 
-    # data_generater = GenerateData(cfg)
-
-    # data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
-
-    # data_generater = GenerateData(cfg,object_type='long_cube')
-    # data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
-
-    data_generater = GenerateData(cfg,object_type='high_cube')
-    data_generater.generate_data(cfg['data']['num_episodes'], csv_path, data_dir)
+        data_generater = GenerateData(cfg,object_type='high_cube')
+        data_generater.generate_data(cfg['data']['num_episodes'], csv_writer=writer)
+    
+    f.close()
 
     
 

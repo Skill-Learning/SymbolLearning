@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 import csv
 from labels_dict import *
+import open3d
 import torchvision.transforms as T
 
 def init_weights_and_freeze(model_tgt, model_src, freeze_layers = []):
@@ -48,7 +49,7 @@ def load_data_without_split(filename):
     return data_dict
 
 def make_data_row(episode_num, action_vector, 
-                    init_pose, init_img, final_pose, final_img, data_dir, env_idx, obj_type="std_cube"):
+                    init_pose, point_cloud, final_pose, data_dir, env_idx, obj_type="std_cube"):
     '''
         make a row of data for training
     '''
@@ -68,12 +69,13 @@ def make_data_row(episode_num, action_vector,
         row.append(init_pose[0][i].item())
     for i in range(7):
         row.append(final_pose[0][i].item())
-    init_img_path = f"{data_dir}/images/{episode_num}_{env_idx}_init_image_{timestamp}.png"
-    torchvision.utils.save_image(init_img, init_img_path)
-    row.append(init_img_path)
-    final_img_path = f"{data_dir}/images/{episode_num}_{env_idx}_final_image_{timestamp}.png"
-    torchvision.utils.save_image(final_img, final_img_path)
-    row.append(final_img_path)
+    
+    if not os.path.exists(data_dir+'/point_clouds'):
+        os.mkdir(data_dir+'/point_clouds')
+
+    point_cloud_path = f"{data_dir}/point_clouds/{episode_num}_{env_idx}_init_image_{timestamp}.ply"
+    open3d.io.write_point_cloud(point_cloud_path, point_cloud)
+    row.append(point_cloud_path)
     return row
 
 def make_inference_row(action_vector, 
