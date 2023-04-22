@@ -49,7 +49,7 @@ def load_data_without_split(filename):
     return data_dict
 
 def make_data_row(episode_num, action_vector, 
-                    init_pose, point_cloud, final_pose, data_dir, env_idx, obj_type="std_cube"):
+                    init_pose, point_cloud, point_cloud_downsampled, final_pose, data_dir, env_idx, obj_type="std_cube"):
     '''
         make a row of data for training
     '''
@@ -72,6 +72,12 @@ def make_data_row(episode_num, action_vector,
     
     if not os.path.exists(data_dir+'/point_clouds'):
         os.mkdir(data_dir+'/point_clouds')
+    if not os.path.exists(data_dir+'/point_cloud_downsampled'):
+        os.mkdir(data_dir+'/point_cloud_downsampled')
+
+    point_cloud_path = f"{data_dir}/point_cloud_downsampled/{episode_num}_{env_idx}_init_image_{timestamp}.ply"
+    open3d.io.write_point_cloud(point_cloud_path, point_cloud_downsampled)
+    row.append(point_cloud_path)
 
     point_cloud_path = f"{data_dir}/point_clouds/{episode_num}_{env_idx}_init_image_{timestamp}.ply"
     open3d.io.write_point_cloud(point_cloud_path, point_cloud)

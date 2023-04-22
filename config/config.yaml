@@ -1,5 +1,5 @@
 flags:
-  visualize: False
+  visualize: True
   save_data: False
 
 point_cloud:
@@ -104,7 +104,7 @@ camera:
   width: 320
   height: 240
 
-num_cameras: 6
+num_cameras: 7
 
 # ______________________________________________________________________________
 # Learning Parameters
