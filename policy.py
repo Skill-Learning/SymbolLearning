@@ -428,7 +428,7 @@ class GraspPointYPolicy(GraspPolicy):
 
         return RigidTransform_to_transform(pre_grasp_transform)
 
-class GraspPointRightPolicy(GraspPolicy):
+class GraspPointBehindPolicy(GraspPolicy):
 
     def _get_grasp_transform(self, env_idx, ee_transform):
 
