@@ -8,10 +8,10 @@ import os
 import csv
 from isaacgym import gymapi
 from isaacgym_utils.scene import GymScene
-from isaacgym_utils.assets import GymFranka, GymBoxAsset
+from isaacgym_utils.assets import GymFranka, GymBoxAsset, GymURDFAsset
 from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
-from policy import *
+from policy import GraspPointXPolicy, GraspPointYPolicy
 from isaacgym_utils.draw import draw_transforms, draw_contacts, draw_camera
 import time 
 from visualization.visualizer3d import Visualizer3D as vis3d
@@ -45,30 +45,17 @@ class GenerateData():
         self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
         self.franka_name, self.table_name, self.block_name = 'franka', 'table', 'block'
 
-        # TODO - low priority: Replace name block with object
-
-        if self.object_type == "std_cube":
-            self.block = GymBoxAsset(self.scene, **cfg['block']['dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
-        
-        # TODO: Add other objects
-        elif self.object_type == "std_cylinder":
-            raise NotImplementedError
-        elif self.object_type == "std_sphere":
-            raise NotImplementedError
-        elif self.object_type == "high_cube":
-            self.block = GymBoxAsset(self.scene, **cfg['block']['high_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
-        elif self.object_type == "long_cube":
-            self.block = GymBoxAsset(self.scene, **cfg['block']['long_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
-        elif self.object_type == "wide_cube":
-            self.block = GymBoxAsset(self.scene, **cfg['block']['wide_dims'], shape_props = cfg['block']['shape_props'], asset_options = cfg['block']['asset_options'], rb_props=cfg['block']['rb_props'])
+        self.block = GymURDFAsset(
+                        cfg['urdf']['urdf_path'],
+                        self.scene, 
+                        shape_props=cfg['urdf']['shape_props'],
+                        rb_props=cfg['urdf']['rb_props'],
+                    )
         # Add transforms to scene
         self.table_transform = gymapi.Transform(p=gymapi.Vec3(cfg['table']['dims']['sx']/3, 0, cfg['table']['dims']['sz']/2))
         self.franka_transform = gymapi.Transform(p=gymapi.Vec3(0, 0, cfg['table']['dims']['sz'] + 0.01))
 
-        if(self.object_type == "high_cube"):
-            z = cfg['table']['dims']['sz'] + cfg['block']['high_dims']['sz'] / 2 + 0.1
-        else:
-            z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
+        z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         
         self.block_transforms = [gymapi.Transform(p=gymapi.Vec3(
             (np.random.rand()*2 - 1) * 0.06 + 0.3, 
@@ -257,45 +244,7 @@ class GenerateData():
         return pcd, pcd_downsampled, pcd_downsampled_normals
 
     def run_episode(self):
-        # sample block poses
-        block_dims = [self.block.sx,self.block.sy,self.block.sz]
-        # actions = ['PokeX', 'PokeY', 'PokeTop' ,'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
-        # actions = ['PokeFrontRE', 'PokeFrontLE']
-        # actions = ['PokeTop', 'PokeX', 'PokeY']
-        actions = ['PokeTop']
-        action = actions[np.random.randint(0, len(actions))]
-        if action == 'PokeX':
-            policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
-        elif action == 'PokeY':
-            policy = PokeSidePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 1, 0, 0, 0, 0])
-        elif action == 'PokeFrontRE':
-            policy = PushFrontREPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 0, 1, 0, 0, 0])
-        elif action == 'PokeFrontLE':
-            policy = PushFrontLEPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
-        elif action == 'PokeTop':
-            policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
-            if(self.object_type == "high_cube"):
-                policy = TopplePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
-        # elif action == 'GraspSide':
-        #     policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
-        #     action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
-        elif action == 'Testing':
-            '''This is just a random condition to test the environment, move to the hardcoded position'''
-            policy = PushFrontLEPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
-            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
-        else:
-            raise ValueError(f"Invalid action {action}")
 
-        # set block poses
-        for env_idx in self.scene.env_idxs:
-            self.block.set_rb_transforms(env_idx, self.block_name, [self.block_transforms[env_idx]])
-
-        
         # Collect Object data 
         
         # * Pose: [p[x,y,z] r[x,y,z,w]]
@@ -316,6 +265,20 @@ class GenerateData():
             point_clouds.append(pc)
             normals.append(pc_normal)
             point_cloud_downsampled.append(pc_downsampled)
+
+        actions = ['GraspPointX']
+        action = actions[np.random.randint(0, len(actions))]
+        if action == 'GraspPointX':
+            policy = GraspPointXPolicy(self.franka, self.franka_name, self.block, self.block_name, point_cloud_downsampled, normals, cfg['scene']['n_envs'])
+        else:
+            raise ValueError(f"Invalid action {action}")
+
+        # set block poses
+        for env_idx in self.scene.env_idxs:
+            self.block.set_rb_transforms(env_idx, self.block_name, [self.block_transforms[env_idx]])
+
+        
+
 
         initial_poses = np.array(initial_poses)
         initial_poses = torch.tensor(initial_poses)

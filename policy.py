@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from autolab_core import RigidTransform, transformations
 from isaacgym import gymapi
-from .math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
+from math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
                     project_to_line, compute_task_space_impedance_control, transform_to_RigidTransform,\
                         RigidTransform_to_transform, rotation_between_axes
 
