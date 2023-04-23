@@ -259,70 +259,6 @@ class EEImpedanceWaypointPolicy(Policy):
         self._franka.apply_torque(env_idx, self._franka_name, tau)
 
 
-class PokePolicy(Policy):
-    def __init__(self, franka, franka_name, block, block_name, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._franka = franka
-        self._franka_name = franka_name
-        self._block = block
-        self._block_name = block_name
-        self._time_horizon = 700 
-        self.reset()
-
-    def reset(self):
-        self._pre_poke_transforms = []
-        self._poke_transforms = []
-        self._init_ee_transforms = []
-        self._ee_waypoint_policies = []
-        self._poke_final_transforms = []
-
-
-    @abstractmethod
-    def _get_pre_poke_transform(self, poke_transform, env_idx):
-        raise NotImplementedError
-
-    @abstractmethod
-    def _get_poke_final_transform(self, poke_transform, env_idx):
-        raise NotImplementedError
-
-    def __call__(self, scene, env_idx, t_step, t_sim):
-        ee_transform = self._franka.get_ee_transform(env_idx, self._franka_name)
-
-        if t_step ==0:
-            self._init_ee_transforms.append(ee_transform)
-            self._ee_waypoint_policies.append(
-                EEImpedanceWaypointPolicy(self._franka, self._franka_name, ee_transform, ee_transform, T=20)
-            )
-        
-        if t_step==20:
-            block_transform = self._block.get_rb_transforms(env_idx, self._block_name)[0]
-            poke_transform = self._get_poke_transform(block_transform, env_idx)
-            self._poke_transforms.append(poke_transform)
-            self._pre_poke_transforms.append(self._get_pre_poke_transform(poke_transform, env_idx))
-            self._poke_final_transforms.append(self._get_poke_final_transform(poke_transform, env_idx))
-
-            self._ee_waypoint_policies[env_idx]= EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, ee_transform, self._pre_poke_transforms[env_idx], T=180 
-            )
-            self._franka.close_grippers(env_idx, self._franka_name)
-        
-        if t_step==200:
-            self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, self._pre_poke_transforms[env_idx], self._poke_final_transforms[env_idx], T=150
-            )          
-        
-        if t_step==350:
-            self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, self._poke_final_transforms[env_idx], self._pre_poke_transforms[env_idx], T=150
-            )
-        
-        if t_step==500:
-            self._ee_waypoint_policies[env_idx] = EEImpedanceWaypointPolicy(
-                self._franka, self._franka_name, self._pre_poke_transforms[env_idx], self._init_ee_transforms[env_idx], T=200
-            )
-        self._ee_waypoint_policies[env_idx](scene, env_idx, t_step, t_sim)
-
-
 class GraspPolicy(Policy):
     def __init__(self, franka, franka_name, block, block_name, points, point_normals, n_envs, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -493,3 +429,136 @@ class GraspPointYPolicy(GraspPolicy):
         return RigidTransform_to_transform(pre_grasp_transform)
 
 
+
+class PokePolicy(Policy):
+    def __init__(self, franka, franka_name, block, block_name, points, point_normals, n_envs, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        """
+        :param franka: Franka object
+        :param franka_name: name of the franka
+        :param block: block object
+        :param block_name: name of the block
+        :param points: list of points to grasp [o3d.PointCloud]*n
+        :param point_normals: list of point normals [np.array([x,y,z])]*n
+        Note: n should be equal to the n_envs from scene
+        # TODO MS: add an assert for the above check in the generate_data.py
+        """
+
+        self._franka = franka
+        self._franka_name = franka_name
+        self._time_horizon = 710
+        self._block = block
+        self._block_name = block_name
+        self._points = points
+        self._point_normals = point_normals
+        self._n_envs = n_envs
+        self.reset()
+
+    def reset(self):
+        self._pre_poke_transforms = []
+        self._poke_transforms = []
+        self._init_ee_transforms = []
+        self._ee_waypoint_policies = []
+        self._post_poke_transforms = []
+
+    @abstractmethod
+    def _get_poke_transform(self, env_idx):
+        raise NotImplementedError
+
+    @abstractmethod
+    def _get_pre_poke_transform(self, env_idx, poke_transform):
+        raise NotImplementedError  
+
+    @abstractmethod
+    def _get_post_poke_transform(self, env_idx, poke_transform):
+        raise NotImplementedError        
+
+    def __call__(self, scene, env_idx, t_step, t_sim):
+        ee_transform = self._franka.get_ee_transform(env_idx, self._franka_name)
+
+        if t_step == 0:
+            self._init_joints = self._franka.get_joints(env_idx, self._franka_name)
+            self._init_rbs = self._franka.get_rb_states(env_idx, self._franka_name)
+
+        if t_step == 20:
+            ee_transform = self._franka.get_ee_transform(env_idx, self._franka_name)
+            self._init_ee_transforms.append(ee_transform)
+
+            poke_transform = self._get_poke_transform(env_idx, ee_transform)
+            self._poke_transforms.append(poke_transform)
+            self._pre_poke_transforms.append(self._get_pre_poke_transform(env_idx, poke_transform))
+            self._post_poke_transforms.append(self._get_post_poke_transform(env_idx, poke_transform))
+
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._pre_poke_transforms[env_idx])
+
+        if t_step == 100:
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._poke_transforms[env_idx])
+
+        if t_step == 150:
+            self._franka.close_grippers(env_idx, self._franka_name)
+        
+        if t_step == 250:
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._post_poke_transforms[env_idx])
+
+        if t_step == 350:
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._poke_transforms[env_idx])
+
+        if t_step == 500:
+            self._franka.open_grippers(env_idx, self._franka_name)
+
+
+        if t_step == 550:
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._pre_poke_transforms[env_idx])
+
+        if t_step == 600:
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._init_ee_transforms[env_idx])
+
+        if t_step == 700:
+            self._franka.set_joints(env_idx, self._franka_name, self._init_joints)
+            self._franka.set_rb_states(env_idx, self._franka_name, self._init_rbs)
+
+
+class PokePointXPolicy(PokePolicy):
+
+    def _get_poke_transform(self, env_idx, ee_transform):
+        # pc = np.asarray(self._points[env_idx].points)
+        # max_z_idx = np.argmax(pc[:,2])
+        random_index = np.random.randint(0, 50)
+        random_index = 0
+
+        # import ipdb; ipdb.set_trace()
+        pokeing_location = np.asarray(self._points[env_idx].points)[random_index]
+
+        gripper_transform = transform_to_RigidTransform(ee_transform)
+
+        poke_transform = RigidTransform(
+            translation=pokeing_location,
+            rotation = gripper_transform.rotation,
+        )
+
+
+        return RigidTransform_to_transform(poke_transform)
+
+    
+    def _get_pre_poke_transform(self, env_idx, poke_transform):
+        
+        poke_rigid_transform = transform_to_RigidTransform(poke_transform)
+
+        pre_poke_transform = RigidTransform(
+            translation=poke_rigid_transform.translation - 0.15 * np.array([1, 0, 0]),
+            rotation=poke_rigid_transform.rotation,
+        )
+
+        return RigidTransform_to_transform(pre_poke_transform)
+    
+    def _get_post_poke_transform(self, env_idx, poke_transform):
+        
+        poke_rigid_transform = transform_to_RigidTransform(poke_transform)
+
+        pre_poke_transform = RigidTransform(
+            translation=poke_rigid_transform.translation + 0.15 * np.array([1, 0, 0]),
+            rotation=poke_rigid_transform.rotation,
+        )
+
+        return RigidTransform_to_transform(pre_poke_transform)
