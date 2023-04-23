@@ -19,6 +19,7 @@ import torch
 from utils import *
 import open3d as o3d
 from matplotlib import cm
+# from pytorch3d.ops import sample_farthest_points
 
 
 # TODO: Policy Class 
@@ -234,8 +235,8 @@ class GenerateData():
             
         
         point_cloud=np.concatenate(point_cloud)
+        
         #Change Normals
-
         min_z = np.min(point_cloud[:,2])
         max_z = np.max(point_cloud[:,2])
 
@@ -245,10 +246,14 @@ class GenerateData():
         top_bol=np.where(point_cloud[:,2]<=0.98*max_z,False, True)
         point_cloud_top=point_cloud[top_bol]
         point_cloud_bottom=point_cloud[~top_bol]
-        import ipdb; ipdb.set_trace()
 
+        #Centroid calculation
+        top_bol=np.where(point_cloud[:,2]<=0.991*max_z,False, True)
+        point_cloud_centroid=point_cloud[top_bol]
+        centroid=np.mean(point_cloud_centroid,axis=0)
         
-        #Downsampling PointCloud
+        
+        #Processing top portion of point cloud
         pcd_top=o3d.geometry.PointCloud()
         pcd_top.points = o3d.utility.Vector3dVector(point_cloud_top)
         pcd_top = pcd_top.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
@@ -257,37 +262,42 @@ class GenerateData():
         pcd_top.normals = o3d.utility.Vector3dVector(normals)
         # print(np.asarray(pcd_top.points).shape)
 
+        #Processing bottom portion of point cloud
         pcd_rest=o3d.geometry.PointCloud()
         pcd_rest.points = o3d.utility.Vector3dVector(point_cloud_bottom)
         pcd_rest = pcd_rest.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
         pcd_rest.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
-        print(np.asarray(pcd_rest.points).shape)
-        # stack this normal for each point
-        #Compute normals
-        pcd_downsampled=pcd_rest.farthest_point_down_sample(cfg['point_cloud']['num_points'])
-        pcd_downsampled_normals=np.asarray(pcd_rest.normals)
 
+        #Merging point cloud
         pcd=pcd_rest + pcd_top
 
-        # max_bol=np.where(point_cloud[:,2]<0.9*max_z,True, False)
-        # pcd_downsampled_normals[max_bol]=np.array([0,0,1])
+        #Compute farthest point sampling
+        points=np.asarray(pcd.points)
+        # import ipdb; ipdb.set_trace()
+        indices,_=farthest_point_sampling(points,k=100)
 
         # pcd.estimate_normals()
         if visualize:
             for camera_pose in camera_poses:
                 vis3d.pose(camera_pose)
 
-            # vis3d.points(
-            #         pcd.points, 
-            #         color=cm.tab10.colors[i],
-            #         scale=0.005
-            #     )
-            # pcd.estimate_normals()
-            o3d.visualization.draw_geometries([pcd], point_show_normal=True)
+            vis3d.points(
+                    points[indices[0]], 
+                    color=cm.tab10.colors[i],
+                    scale=0.005
+                )
 
-            # vis3d.show()
+            vis3d.points(
+                    centroid, 
+                    color=[0.5,0.5,0.5],
+                    scale=0.005
+                )
 
-        return pcd_top, pcd_downsampled, pcd_downsampled_normals
+            # o3d.visualization.draw_geometries([pcd], point_show_normal=True)
+
+            vis3d.show()
+
+        return {'full_point':points, 'downsampled_point':points[indices], 'normals':np.asarray(pcd.normals)[indices[0]], 'centoid':centroid}
 
     def run_episode(self):
 
@@ -308,10 +318,10 @@ class GenerateData():
         for i,env_idx in enumerate(self.scene.env_idxs):
             initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
             self.scene.render_cameras()
-            pc, pc_downsampled, pc_normal = self.generate_point_cloud(self.block_transforms[i], visualize=cfg['flags']['visualize'])
-            point_clouds.append(pc)
-            normals.append(pc_normal)
-            point_cloud_downsampled.append(pc)
+            data = self.generate_point_cloud(self.block_transforms[i], visualize=cfg['flags']['visualize'])
+            point_clouds.append(data['full_point'])
+            normals.append(data['normals'])
+            point_cloud_downsampled.append(data['downsampled_point'])
             # point_cloud_downsampled.append(pc_downsampled)
 
         actions = ['GraspPointX']
