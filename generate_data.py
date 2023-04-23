@@ -8,7 +8,7 @@ import os
 import csv
 from isaacgym import gymapi
 from isaacgym_utils.scene import GymScene
-from isaacgym_utils.assets import GymFranka, GymBoxAsset, GymURDFAsset
+from isaacgym_utils.assets import GymFranka, GymBoxAsset
 from isaacgym_utils.camera import GymCamera
 from isaacgym_utils.math_utils import RigidTransform_to_transform
 from policy import *
@@ -36,7 +36,7 @@ def vis_cam_images(image_list):
     plt.show()
 
 class GenerateData():
-    def __init__(self, cfg, object_type="urdf"):
+    def __init__(self, cfg, object_type="std_cube"):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.object_type = object_type
     # Create Environment 
@@ -70,16 +70,8 @@ class GenerateData():
         else:
             z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         
-        if self.object_type == "urdf":
-            self.block = GymURDFAsset(
-                            cfg['urdf']['urdf_path'],
-                            self.scene, 
-                            shape_props=cfg['urdf']['shape_props'],
-                            rb_props=cfg['urdf']['rb_props'],
-                        )
-
         self.block_transforms = [gymapi.Transform(p=gymapi.Vec3(
-            (np.random.rand()*2 - 1) * 0.1 + 0.3, 
+            (np.random.rand()*2 - 1) * 0.06 + 0.3, 
             (np.random.rand()*2 - 1) * 0.2 + 0.1,
             z
         )) for _ in range(self.scene.n_envs)]
@@ -137,10 +129,20 @@ class GenerateData():
                         [0, -1, 0]
                     ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-45))
             )),
-            #top
+            #top1
             RigidTransform_to_transform(
                 RigidTransform(
                     translation=[0.4,-0.075, 0.725+0.4],
+                    rotation=np.array([
+                        [-1, 0, 0],
+                        [0, 0, -1],
+                        [0, -1, 0]
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-90))
+            )),
+            #top2
+            RigidTransform_to_transform(
+                RigidTransform(
+                    translation=[0.4,-0.075+0.6, 0.725+0.4],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
@@ -231,12 +233,14 @@ class GenerateData():
         pcd.points = o3d.utility.Vector3dVector(point_cloud)
         
         #Downsampling PointCloud
+        # import ipdb; ipdb.set_trace()
         pcd = pcd.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
-        pcd=pcd.farthest_point_down_sample(cfg['point_cloud']['num_points'])
+        print(np.asarray(pcd.points).shape)
+        pcd_downsampled=pcd.farthest_point_down_sample(cfg['point_cloud']['num_points'])
         
         #Compute normals
-        pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
-        pcd_normals=np.asarray(pcd.normals)
+        pcd_downsampled.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+        pcd_downsampled_normals=np.asarray(pcd_downsampled.normals)
 
         if visualize:
             for camera_pose in camera_poses:
@@ -249,12 +253,12 @@ class GenerateData():
                 )
 
             vis3d.show()
-        # TODO: return full point cloud , some selected points and their normals (ideally in a list)
-        return pcd, pcd_normals
+
+        return pcd, pcd_downsampled, pcd_downsampled_normals
 
     def run_episode(self):
         # sample block poses
-        # block_dims = [self.block.sx,self.block.sy,self.block.sz]
+        block_dims = [self.block.sx,self.block.sy,self.block.sz]
         # actions = ['PokeX', 'PokeY', 'PokeTop' ,'GraspTop', 'GraspFront', 'GraspSide', 'Testing']
         # actions = ['PokeFrontRE', 'PokeFrontLE']
         # actions = ['PokeTop', 'PokeX', 'PokeY']
@@ -263,12 +267,27 @@ class GenerateData():
         if action == 'PokeX':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
             action_vec = torch.tensor([1, 0, 0, 0, 0, 0])
+        elif action == 'PokeY':
+            policy = PokeSidePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
+            action_vec = torch.tensor([0, 1, 0, 0, 0, 0])
+        elif action == 'PokeFrontRE':
+            policy = PushFrontREPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
+            action_vec = torch.tensor([0, 0, 1, 0, 0, 0])
+        elif action == 'PokeFrontLE':
+            policy = PushFrontLEPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
+            action_vec = torch.tensor([0, 0, 0, 1, 0, 0])
         elif action == 'PokeTop':
             policy = PokeFrontPolicy(self.franka, self.franka_name, self.block, self.block_name)
+            if(self.object_type == "high_cube"):
+                policy = TopplePolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
             action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         # elif action == 'GraspSide':
         #     policy = GraspSidePolicy(self.franka, self.franka_name, self.block, self.block_name)
         #     action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
+        elif action == 'Testing':
+            '''This is just a random condition to test the environment, move to the hardcoded position'''
+            policy = PushFrontLEPolicy(self.franka, self.franka_name, self.block, self.block_name, block_dims)
+            action_vec = torch.tensor([0, 0, 0, 0, 1, 0])
         else:
             raise ValueError(f"Invalid action {action}")
 
@@ -285,6 +304,7 @@ class GenerateData():
         initial_poses = []
         point_clouds = []
         normals=[]
+        point_cloud_downsampled=[]
         policy.reset()
         for _ in range(100):
             self.scene.step()
@@ -292,9 +312,10 @@ class GenerateData():
         for i,env_idx in enumerate(self.scene.env_idxs):
             initial_poses.append(self.block.get_rb_poses_as_np_array(env_idx, self.block_name))
             self.scene.render_cameras()
-            pc, pc_normal = self.generate_point_cloud(self.block_transforms[i], visualize=cfg['flags']['visualize'])
+            pc, pc_downsampled, pc_normal = self.generate_point_cloud(self.block_transforms[i], visualize=cfg['flags']['visualize'])
             point_clouds.append(pc)
             normals.append(pc_normal)
+            point_cloud_downsampled.append(pc_downsampled)
 
         initial_poses = np.array(initial_poses)
         initial_poses = torch.tensor(initial_poses)
@@ -308,16 +329,17 @@ class GenerateData():
 
         final_poses = np.array(final_poses)
         final_poses = torch.tensor(final_poses)
-        return  initial_poses, point_clouds, final_poses, action_vec, self.object_type, normals
+        return  initial_poses, point_clouds, point_cloud_downsampled, final_poses, action_vec, self.object_type, normals
         
     def generate_data(self, num_episodes, csv_writer, save_data=False):
         for i in range(num_episodes):
-            initial_poses, point_clouds, final_poses, action_vec, obj_type, normals = self.run_episode()
+            initial_poses, point_clouds, point_cloud_downsampled, final_poses, action_vec, obj_type, normals = self.run_episode()
             
             if save_data:
                 for env_idx in self.scene.env_idxs:
-                    row = make_data_row(i, action_vec, initial_poses[env_idx], point_clouds[env_idx], final_poses[env_idx], data_dir, env_idx, obj_type= obj_type)
+                    row = make_data_row(i, action_vec, initial_poses[env_idx], point_clouds[env_idx],point_cloud_downsampled[env_idx] ,final_poses[env_idx], data_dir, env_idx, obj_type= obj_type)
                     csv_writer.writerow(row)
+                    # import ipdb; ipdb.set_trace()
 
 
 if __name__=='__main__':
@@ -330,7 +352,7 @@ if __name__=='__main__':
             'initial_pose_orientation_x', 'initial_pose_orientation_y', 'initial_pose_orientation_z', 'initial_pose_orientation_w',
             'final_pose_position_x', 'final_pose_position_y', 'final_pose_position_z',
             'final_pose_orientation_x', 'final_pose_orientation_y', 'final_pose_orientation_z', 'final_pose_orientation_w',
-            'initial_image_path', 'final_image_path']
+            'downsamped_pc_path', 'entire_pc_path']
 
 
     curr_date = datetime.now().strftime("%Y%m%d")
@@ -347,7 +369,7 @@ if __name__=='__main__':
         writer = csv.writer(f)
         writer.writerow(header)
 
-        data_generater = GenerateData(cfg,object_type='urdf')
+        data_generater = GenerateData(cfg,object_type='high_cube')
         data_generater.generate_data(cfg['data']['num_episodes'], csv_writer=writer, save_data=cfg['flags']['save_data'])
     
     f.close()
