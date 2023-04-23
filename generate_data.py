@@ -71,7 +71,7 @@ class GenerateData():
             z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         
         self.block_transforms = [gymapi.Transform(p=gymapi.Vec3(
-            (np.random.rand()*2 - 1) * 0.1 + 0.3, 
+            (np.random.rand()*2 - 1) * 0.06 + 0.3, 
             (np.random.rand()*2 - 1) * 0.2 + 0.1,
             z
         )) for _ in range(self.scene.n_envs)]
@@ -233,8 +233,9 @@ class GenerateData():
         pcd.points = o3d.utility.Vector3dVector(point_cloud)
         
         #Downsampling PointCloud
-        # pcd = pcd.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
         # import ipdb; ipdb.set_trace()
+        pcd = pcd.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
+        print(np.asarray(pcd.points).shape)
         pcd_downsampled=pcd.farthest_point_down_sample(cfg['point_cloud']['num_points'])
         
         #Compute normals
@@ -338,7 +339,7 @@ class GenerateData():
                 for env_idx in self.scene.env_idxs:
                     row = make_data_row(i, action_vec, initial_poses[env_idx], point_clouds[env_idx],point_cloud_downsampled[env_idx] ,final_poses[env_idx], data_dir, env_idx, obj_type= obj_type)
                     csv_writer.writerow(row)
-                    import ipdb; ipdb.set_trace()
+                    # import ipdb; ipdb.set_trace()
 
 
 if __name__=='__main__':
@@ -351,7 +352,7 @@ if __name__=='__main__':
             'initial_pose_orientation_x', 'initial_pose_orientation_y', 'initial_pose_orientation_z', 'initial_pose_orientation_w',
             'final_pose_position_x', 'final_pose_position_y', 'final_pose_position_z',
             'final_pose_orientation_x', 'final_pose_orientation_y', 'final_pose_orientation_z', 'final_pose_orientation_w',
-            'initial_image_path', 'final_image_path']
+            'downsamped_pc_path', 'entire_pc_path']
 
 
     curr_date = datetime.now().strftime("%Y%m%d")

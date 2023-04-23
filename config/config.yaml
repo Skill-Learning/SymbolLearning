@@ -1,5 +1,5 @@
 flags:
-  visualize: True
+  visualize: False
   save_data: False
 
 point_cloud:
