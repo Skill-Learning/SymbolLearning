@@ -428,6 +428,78 @@ class GraspPointYPolicy(GraspPolicy):
 
         return RigidTransform_to_transform(pre_grasp_transform)
 
+class GraspPointRightPolicy(GraspPolicy):
+
+    def _get_grasp_transform(self, env_idx, ee_transform):
+
+        pcd = np.asarray(self._points[env_idx].points)
+        min_x = np.min(pcd[:,0])
+        max_x = np.max(pcd[:,0])
+        rear_point_range = min_x + (max_x - min_x) * 0.1
+        rear_points = pcd[pcd[:,0] < rear_point_range]
+
+        rear_points = rear_points[rear_points[:,2].argsort()]
+        grasping_location = rear_points[len(rear_points)//2]
+
+        # align the z-axis of the gripper with the normal of the point
+        gripper_transform = transform_to_RigidTransform(ee_transform)
+
+        # rotate the ee_transform with the rotation matrix
+        grasp_transform = RigidTransform(
+            translation=grasping_location,
+            rotation = gripper_transform.rotation,
+        )
+
+        return RigidTransform_to_transform(grasp_transform)
+
+    
+    def _get_pre_grasp_transform(self, env_idx, grasp_transform):
+        
+        grasp_rigid_transform = transform_to_RigidTransform(grasp_transform)
+
+        pre_grasp_transform = RigidTransform(
+            translation=grasp_rigid_transform.translation - 0.1 * np.array([1,0,0]),
+            rotation=grasp_rigid_transform.rotation,
+        )
+
+        return RigidTransform_to_transform(pre_grasp_transform)
+    
+
+class GraspPointRightPolicy(GraspPolicy):
+
+    def _get_grasp_transform(self, env_idx, ee_transform):
+
+        pcd = np.asarray(self._points[env_idx].points)
+        min_y = np.min(pcd[:,1])
+        max_y = np.max(pcd[:,1])
+        left_point_range = min_y + (max_y - min_y) * 0.1
+        left_points = pcd[pcd[:,0] < left_point_range]
+
+        left_points = left_points[left_points[:,2].argsort()]
+        grasping_location = left_points[len(left_points)//2]
+
+        # align the z-axis of the gripper with the normal of the point
+        gripper_transform = transform_to_RigidTransform(ee_transform)
+
+        # rotate the ee_transform with the rotation matrix
+        grasp_transform = RigidTransform(
+            translation=grasping_location,
+            rotation = gripper_transform.rotation,
+        )
+
+        return RigidTransform_to_transform(grasp_transform)
+
+    
+    def _get_pre_grasp_transform(self, env_idx, grasp_transform):
+        
+        grasp_rigid_transform = transform_to_RigidTransform(grasp_transform)
+
+        pre_grasp_transform = RigidTransform(
+            translation=grasp_rigid_transform.translation - 0.1 * np.array([0,1,0]),
+            rotation=grasp_rigid_transform.rotation,
+        )
+
+        return RigidTransform_to_transform(pre_grasp_transform)
 
 
 class PokePolicy(Policy):
