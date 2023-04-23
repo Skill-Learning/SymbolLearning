@@ -234,21 +234,44 @@ class GenerateData():
             
         
         point_cloud=np.concatenate(point_cloud)
-        pcd=o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(point_cloud)
+        #Change Normals
+
+        min_z = np.min(point_cloud[:,2])
+        max_z = np.max(point_cloud[:,2])
+
+        min_bol=np.where(point_cloud[:,2]>=1.01*min_z,True, False)
+        point_cloud=point_cloud[min_bol]
+
+        top_bol=np.where(point_cloud[:,2]<=0.98*max_z,False, True)
+        point_cloud_top=point_cloud[top_bol]
+        point_cloud_bottom=point_cloud[~top_bol]
+        import ipdb; ipdb.set_trace()
+
         
         #Downsampling PointCloud
-        # import ipdb; ipdb.set_trace()
-        pcd = pcd.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
-        print(np.asarray(pcd.points).shape)
-        pcd_downsampled=pcd.farthest_point_down_sample(cfg['point_cloud']['num_points'])
+        pcd_top=o3d.geometry.PointCloud()
+        pcd_top.points = o3d.utility.Vector3dVector(point_cloud_top)
+        pcd_top = pcd_top.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
         normals = np.array([0,0,1])
+        normals = np.tile(normals, (np.asarray(pcd_top.points).shape[0], 1))
+        pcd_top.normals = o3d.utility.Vector3dVector(normals)
+        # print(np.asarray(pcd_top.points).shape)
+
+        pcd_rest=o3d.geometry.PointCloud()
+        pcd_rest.points = o3d.utility.Vector3dVector(point_cloud_bottom)
+        pcd_rest = pcd_rest.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
+        pcd_rest.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+        print(np.asarray(pcd_rest.points).shape)
         # stack this normal for each point
-        normals = np.tile(normals, (np.asarray(pcd.points).shape[0], 1))
-        pcd.normals = o3d.utility.Vector3dVector(normals)
         #Compute normals
-        pcd_downsampled.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
-        pcd_downsampled_normals=np.asarray(pcd.normals)
+        pcd_downsampled=pcd_rest.farthest_point_down_sample(cfg['point_cloud']['num_points'])
+        pcd_downsampled_normals=np.asarray(pcd_rest.normals)
+
+        pcd=pcd_rest + pcd_top
+
+        # max_bol=np.where(point_cloud[:,2]<0.9*max_z,True, False)
+        # pcd_downsampled_normals[max_bol]=np.array([0,0,1])
+
         # pcd.estimate_normals()
         if visualize:
             for camera_pose in camera_poses:
@@ -264,7 +287,7 @@ class GenerateData():
 
             # vis3d.show()
 
-        return pcd, pcd_downsampled, pcd_downsampled_normals
+        return pcd_top, pcd_downsampled, pcd_downsampled_normals
 
     def run_episode(self):
 
