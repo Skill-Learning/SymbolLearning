@@ -260,7 +260,7 @@ class EEImpedanceWaypointPolicy(Policy):
 
 
 class GraspPolicy(Policy):
-    def __init__(self, franka, franka_name, block, block_name, points, point_normals, n_envs, *args, **kwargs):
+    def __init__(self, franka, franka_name, block, block_name, points, point_normals, n_envs, centroid_point =None , *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         """
@@ -282,6 +282,7 @@ class GraspPolicy(Policy):
         self._points = points
         self._point_normals = point_normals
         self._n_envs = n_envs
+        self._centroid = centroid_point
         self.reset()
 
     def reset(self):
@@ -399,17 +400,28 @@ class GraspPointYPolicy(GraspPolicy):
         random_index = 0
         grasping_location = np.asarray(self._points[env_idx].points)[random_index]
         grasping_normal = -self._point_normals[env_idx][random_index]
-
+        vertical_grip = False
+        if np.allclose(grasping_normal, np.array([0, 0, -1])):
+            vertical_grip = True
+        
         # align the z-axis of the gripper with the normal of the point
         gripper_transform = transform_to_RigidTransform(ee_transform)
         gripper_z = gripper_transform.z_axis
 
         rotation_matrix = rotation_between_axes(gripper_z, grasping_normal)
 
+        if vertical_grip:
+            angle = np.arctan2(grasping_location[1] - self._centroid[env_idx][1], 
+                                grasping_location[0] - self._centroid[env_idx][0])
+        
+        else:
+            angle = 0
+
+
         # rotate the ee_transform with the rotation matrix
         grasp_transform = RigidTransform(
             translation=grasping_location,
-            rotation = gripper_transform.rotation @ rotation_matrix @ RigidTransform.z_axis_rotation(np.pi/2),
+            rotation = gripper_transform.rotation @ rotation_matrix @ RigidTransform.z_axis_rotation(angle),
         )
 
         return RigidTransform_to_transform(grasp_transform)
