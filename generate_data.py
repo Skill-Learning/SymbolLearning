@@ -41,7 +41,7 @@ class GenerateData():
         self.object_type = object_type
     # Create Environment 
         self.scene = GymScene(cfg['scene'])
-        self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode='torques')
+        self.franka = GymFranka(cfg['franka'], self.scene, actuation_mode='attractors')
         self.table = GymBoxAsset(self.scene, **cfg['table']['dims'], shape_props = cfg['table']['shape_props'], asset_options = cfg['table']['asset_options'])
         self.franka_name, self.table_name, self.block_name = 'franka', 'table', 'block'
 
@@ -58,8 +58,8 @@ class GenerateData():
         z =cfg['table']['dims']['sz'] + cfg['block']['dims']['sz'] / 2 + 0.1
         
         self.block_transforms = [gymapi.Transform(p=gymapi.Vec3(
-            (np.random.rand()*2 - 1) * 0.06 + 0.3, 
-            (np.random.rand()*2 - 1) * 0.2 + 0.1,
+            (np.random.rand()*2 - 1) * 0.05 + 0.4, 
+            (np.random.rand()*2 - 1) * 0.05 + 0.1,
             z
         )) for _ in range(self.scene.n_envs)]
         # Add Cameras 
@@ -119,7 +119,7 @@ class GenerateData():
             #top1
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[0.4,-0.075, 0.725+0.4],
+                    translation=[0.4,-0.075, 0.725+0.5],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
@@ -129,7 +129,7 @@ class GenerateData():
             #top2
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[0.4,-0.075+0.6, 0.725+0.4],
+                    translation=[0.4,-0.075+0.3, 0.725+0.5],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
@@ -224,20 +224,25 @@ class GenerateData():
         pcd = pcd.voxel_down_sample(voxel_size=cfg['point_cloud']['vox_size'])
         print(np.asarray(pcd.points).shape)
         pcd_downsampled=pcd.farthest_point_down_sample(cfg['point_cloud']['num_points'])
-        
+        normals = np.array([0,0,1])
+        # stack this normal for each point
+        normals = np.tile(normals, (np.asarray(pcd.points).shape[0], 1))
+        pcd.normals = o3d.utility.Vector3dVector(normals)
         #Compute normals
         pcd_downsampled.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
-        pcd_downsampled_normals=np.asarray(pcd_downsampled.normals)
-
+        pcd_downsampled_normals=np.asarray(pcd.normals)
+        # pcd.estimate_normals()
         if visualize:
             for camera_pose in camera_poses:
                 vis3d.pose(camera_pose)
 
-            vis3d.points(
-                    pcd.points, 
-                    color=cm.tab10.colors[i],
-                    scale=0.005
-                )
+            # vis3d.points(
+            #         pcd.points, 
+            #         color=cm.tab10.colors[i],
+            #         scale=0.005
+            #     )
+            # pcd.estimate_normals()
+            o3d.visualization.draw_geometries([pcd], point_show_normal=True)
 
             vis3d.show()
 
@@ -249,12 +254,13 @@ class GenerateData():
         
         # * Pose: [p[x,y,z] r[x,y,z,w]]
         # import ipdb;ipdb.set_trace()
-
+        # set block poses
+        for env_idx in self.scene.env_idxs:
+            self.block.set_rb_transforms(env_idx, self.block_name, [self.block_transforms[env_idx]])
         initial_poses = []
         point_clouds = []
         normals=[]
         point_cloud_downsampled=[]
-        policy.reset()
         for _ in range(100):
             self.scene.step()
         self.scene.render_cameras()
@@ -264,22 +270,16 @@ class GenerateData():
             pc, pc_downsampled, pc_normal = self.generate_point_cloud(self.block_transforms[i], visualize=cfg['flags']['visualize'])
             point_clouds.append(pc)
             normals.append(pc_normal)
-            point_cloud_downsampled.append(pc_downsampled)
+            point_cloud_downsampled.append(pc)
+            # point_cloud_downsampled.append(pc_downsampled)
 
         actions = ['GraspPointX']
         action = actions[np.random.randint(0, len(actions))]
         if action == 'GraspPointX':
-            policy = GraspPointXPolicy(self.franka, self.franka_name, self.block, self.block_name, point_cloud_downsampled, normals, cfg['scene']['n_envs'])
+            policy = GraspPointYPolicy(self.franka, self.franka_name, self.block, self.block_name, point_cloud_downsampled, normals, cfg['scene']['n_envs'])
         else:
             raise ValueError(f"Invalid action {action}")
-
-        # set block poses
-        for env_idx in self.scene.env_idxs:
-            self.block.set_rb_transforms(env_idx, self.block_name, [self.block_transforms[env_idx]])
-
         
-
-
         initial_poses = np.array(initial_poses)
         initial_poses = torch.tensor(initial_poses)
 
@@ -292,6 +292,7 @@ class GenerateData():
 
         final_poses = np.array(final_poses)
         final_poses = torch.tensor(final_poses)
+        action_vec = None
         return  initial_poses, point_clouds, point_cloud_downsampled, final_poses, action_vec, self.object_type, normals
         
     def generate_data(self, num_episodes, csv_writer, save_data=False):

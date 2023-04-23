@@ -1,5 +1,5 @@
 flags:
-  visualize: False
+  visualize: True
   save_data: False
 
 point_cloud:
@@ -7,7 +7,7 @@ point_cloud:
   vox_size: 0.005
 
 scene:
-  n_envs: 3
+  n_envs: 5
   es: 1
   gui: 1
   cam:
@@ -31,6 +31,9 @@ scene:
       graphics: 0
 
 franka:
+  attractor_props:
+    stiffness: 1e3
+    damping: 2.5e2
   asset_options:
     fix_base_link: True
     flip_visual_attachments: True
@@ -40,9 +43,10 @@ franka:
     disable_gravity: True
   attractor_props:
     stiffness: 1e3
-    damping: 2.5e2
+    damping: 2e2
   shape_props:
     thickness: 1e-3
+    friction: 1
   dof_props:
     stiffness: [2e3, 2e3, 2e3, 2e3, 2e3, 2e3, 2e3, 1e2, 1e2]
     damping: [2e2, 2e2, 2e2, 2e2, 2e2, 2e2, 2e2, 5, 5]
@@ -90,14 +94,14 @@ block:
     density: 1000
 
 urdf:
-  urdf_path: pybullet/mug/model.urdf
+  urdf_path: pybullet/orange_cup/model.urdf
   shape_props:
     friction: 0.2
     rolling_friction: 0.01
     torsion_friction: 0.01
     thickness: 2e-3
   rb_props:
-    texture: pybullet/mug/texture_map.png
+    texture: pybullet/orange_cup/texture_map.jpg
   asset_options:
     density: 500
 camera:
