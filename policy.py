@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 import numpy as np
-from autolab_core import RigidTransform
+from autolab_core import RigidTransform, transformations
 from isaacgym import gymapi
-from math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
+from .math_utils import min_jerk, slerp_quat, vec3_to_np, np_to_vec3, \
                     project_to_line, compute_task_space_impedance_control, transform_to_RigidTransform,\
-                        RigidTransform_to_transform
+                        RigidTransform_to_transform, rotation_between_axes
 
 
 
@@ -324,13 +324,28 @@ class PokePolicy(Policy):
 
 
 class GraspPolicy(Policy):
-    def __init__(self, franka, franka_name, block, block_name, *args, **kwargs):
+    def __init__(self, franka, franka_name, block, block_name, points, point_normals, n_envs, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        """
+        :param franka: Franka object
+        :param franka_name: name of the franka
+        :param block: block object
+        :param block_name: name of the block
+        :param points: list of points to grasp [np.array([x,y,z])]*n
+        :param point_normals: list of point normals [np.array([x,y,z])]*n
+        Note: n should be equal to the n_envs from scene
+        # TODO MS: add an assert for the above check in the generate_data.py
+        """
+
         self._franka = franka
         self._franka_name = franka_name
+        self._time_horizon = 1500
         self._block = block
         self._block_name = block_name
-        self._time_horizon = 1500
+        self._points = points
+        self._point_normals = point_normals
+        self._n_envs = n_envs
         self.reset()
 
     def reset(self):
@@ -340,7 +355,7 @@ class GraspPolicy(Policy):
         self._ee_waypoint_policies = []
 
     @abstractmethod
-    def _get_grasp_transform(self, env_idx, block_transform):
+    def _get_grasp_transform(self, ee_transform, env_idx):
         raise NotImplementedError
 
     @abstractmethod
@@ -357,10 +372,7 @@ class GraspPolicy(Policy):
             )
 
         if t_step == 20:
-            block_transform = self._block.get_rb_transforms(env_idx, self._block_name)[0]
-            grasp_transform = self._get_grasp_transform(env_idx, block_transform)
-            # pre_grasp_transfrom = gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.2), r=grasp_transform.r)
-
+            grasp_transform = self._get_grasp_transform(env_idx)
             self._grasp_transforms.append(grasp_transform)
             self._pre_grasp_transforms.append(self._get_pre_grasp_transform(env_idx, grasp_transform))
 
@@ -407,95 +419,76 @@ class GraspPolicy(Policy):
 
         self._ee_waypoint_policies[env_idx](scene, env_idx, t_step, t_sim)
     
+class GraspPointXPolicy(GraspPolicy):
 
-# # TODO: Write PokeX, PokeY, Grasp (Front, Side, Top) policies
-class PokeFrontPolicy(PokePolicy):
-    def _get_poke_transform(self, block_transform, env_idx):
-        return gymapi.Transform(p=block_transform.p, r=self._init_ee_transforms[env_idx].r)
+    def _get_grasp_transform(self, ee_transform, env_idx):
+        random_index = np.random.randint(0, self._n_envs)
+        grasping_location = self._points[env_idx][random_index]
+        grasping_normal = -self._point_normals[env_idx][random_index]
 
-    def _get_pre_poke_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.15, 0, -0.03 ), r=poke_transform.r)
+        # align the z-axis of the gripper with the normal of the point
+        gripper_transform = transform_to_RigidTransform(ee_transform)
+        gripper_z = gripper_transform.z_axis
+
+        rotation_matrix = rotation_between_axes(gripper_z, grasping_normal)
+
+        # rotate the ee_transform with the rotation matrix
+        grasp_transform = RigidTransform(
+            translation=grasping_location,
+            rotation = gripper_transform.rotation @ rotation_matrix,
+        )
+
+        return RigidTransform_to_transform(grasp_transform)
+
     
-    def _get_poke_final_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.2, 0, -0.03), r=poke_transform.r)
-
-
-class PokeSidePolicy(PokePolicy):
-    def __init__(self, franka, franka_name, block, block_name, block_dims, *args, **kwargs):
-        super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
-        self._block_dims = block_dims
-    def _get_poke_transform(self, block_transform, env_idx):
-        return gymapi.Transform(p=block_transform.p, r=self._init_ee_transforms[env_idx].r)
-
-    def _get_pre_poke_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, -0.1 - self._block_dims[1]/2, 0), r=poke_transform.r)
-    
-    def _get_poke_final_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0, 0.15, 0), r=poke_transform.r)
-
-
-class TopplePolicy(PokePolicy):
-    def __init__(self, franka, franka_name, block, block_name, block_dims, *args, **kwargs):
-        super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
-        self._block_dims = block_dims
-    def _get_poke_transform(self, block_transform, env_idx):
-        return gymapi.Transform(p=block_transform.p +gymapi.Vec3(0, 0, self._block_dims[2]/10) , r=self._init_ee_transforms[env_idx].r)
-
-    def _get_pre_poke_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.15, 0, self._block_dims[2]/10), r=poke_transform.r)
-    
-    def _get_poke_final_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.15, 0, self._block_dims[2]/10), r=poke_transform.r)
-
-# Push from Right end 
-class PushFrontREPolicy(PokePolicy):
-    def __init__(self, franka, franka_name, block, block_name, block_dims, *args, **kwargs):
-        super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
-        self._block_dims = block_dims
-    def _get_poke_transform(self, block_transform, env_idx):
-        return gymapi.Transform(p=block_transform.p +gymapi.Vec3(0, self._block_dims[1]/5, -0.01) , r=self._init_ee_transforms[env_idx].r)
-
-    def _get_pre_poke_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.15, self._block_dims[1]/5, -0.01), r=poke_transform.r)
-    
-    def _get_poke_final_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.3, self._block_dims[1]/5, -0.01), r=poke_transform.r)
-
-
-class PushFrontLEPolicy(PokePolicy):
-    def __init__(self, franka, franka_name, block, block_name, block_dims, *args, **kwargs):
-        super().__init__(franka, franka_name, block, block_name, *args, **kwargs)
-        self._block_dims = block_dims
-    def _get_poke_transform(self, block_transform, env_idx):
-        return gymapi.Transform(p=block_transform.p +gymapi.Vec3(0, -self._block_dims[1]/5, -0.01) , r=self._init_ee_transforms[env_idx].r)
-
-    def _get_pre_poke_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(-0.15, -self._block_dims[1]/5, -0.01), r=poke_transform.r)
-    
-    def _get_poke_final_transform(self, poke_transform, env_idx):
-        return gymapi.Transform(p=poke_transform.p + gymapi.Vec3(0.3, -self._block_dims[1]/5, -0.01), r=poke_transform.r)
-
-
-class GraspFrontPolicy(GraspPolicy):
-    def _get_grasp_transform(self, env_idx, block_transform):
-        # TODO - MS: This is a bit buggy, it is not always possible to easily reach the required transform 
-        rotated_transform = RigidTransform_to_transform(
-
-            RigidTransform(
-                translation = transform_to_RigidTransform(block_transform).translation,
-                rotation = transform_to_RigidTransform(block_transform).rotation 
-                @ RigidTransform.y_axis_rotation(np.pi/2) @ RigidTransform.z_axis_rotation(np.pi)
-        ))
-        return rotated_transform
     def _get_pre_grasp_transform(self, env_idx, grasp_transform):
-        return gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.2), r=grasp_transform.r)    
+        
+        grasp_rigid_transform = transform_to_RigidTransform(grasp_transform)
 
-# class GraspSidePolicy(GraspPolicy):
-#     raise NotImplementedError
+        grasp_z = grasp_rigid_transform.z_axis
 
-class GraspTopPolicy(GraspPolicy):
-    def _get_grasp_transform(self, env_idx, block_transform):
-        return gymapi.Transform(p=block_transform.p, r=self._init_ee_transforms[env_idx].r)
+        pre_grasp_transform = RigidTransform(
+            translation=grasp_rigid_transform.translation - 0.1 * grasp_z,
+            rotation=grasp_rigid_transform.rotation,
+        )
 
+        return RigidTransform_to_transform(pre_grasp_transform)
+
+
+
+class GraspPointYPolicy(GraspPolicy):
+
+    def _get_grasp_transform(self, ee_transform, env_idx):
+        random_index = np.random.randint(0, self._n_envs)
+        grasping_location = self._points[env_idx][random_index]
+        grasping_normal = -self._point_normals[env_idx][random_index]
+
+        # align the z-axis of the gripper with the normal of the point
+        gripper_transform = transform_to_RigidTransform(ee_transform)
+        gripper_z = gripper_transform.z_axis
+
+        rotation_matrix = rotation_between_axes(gripper_z, grasping_normal)
+
+        # rotate the ee_transform with the rotation matrix
+        grasp_transform = RigidTransform(
+            translation=grasping_location,
+            rotation = gripper_transform.rotation @ rotation_matrix @ RigidTransform.x_axis_rotation(np.pi/2),
+        )
+
+        return RigidTransform_to_transform(grasp_transform)
+
+    
     def _get_pre_grasp_transform(self, env_idx, grasp_transform):
-        return gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.2), r=grasp_transform.r)    
+        
+        grasp_rigid_transform = transform_to_RigidTransform(grasp_transform)
+
+        grasp_z = grasp_rigid_transform.z_axis
+
+        pre_grasp_transform = RigidTransform(
+            translation=grasp_rigid_transform.translation - 0.1 * grasp_z,
+            rotation=grasp_rigid_transform.rotation,
+        )
+
+        return RigidTransform_to_transform(pre_grasp_transform)
+
+
