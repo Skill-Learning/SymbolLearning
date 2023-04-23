@@ -7,7 +7,7 @@ point_cloud:
   vox_size: 0.005
 
 scene:
-  n_envs: 5
+  n_envs: 3
   es: 1
   gui: 1
   cam:

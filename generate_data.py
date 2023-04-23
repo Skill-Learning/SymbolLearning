@@ -99,42 +99,42 @@ class GenerateData():
             #rearNegY(right)
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[self.franka_transform.p.x,-0.075-0.2, 0.725+0.01],
+                    translation=[self.franka_transform.p.x-0.2,-0.075-0.2, 0.7],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
                         [0, -1, 0]
-                    ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-135))
+                    ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-125))
             )),
             #rearPosY(left)
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[self.franka_transform.p.x,-0.075+0.6, 0.725+0.01],
-                    rotation=np.array([
+                    translation=[self.franka_transform.p.x-0.2,-0.075+0.6, 0.7],
+                    rotation=np.array(([
                         [-1, 0, 0],
                         [0, 0, -1],
                         [0, -1, 0]
-                    ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-45))
+                    ]) @ RigidTransform.y_axis_rotation(np.deg2rad(-45))@RigidTransform.x_axis_rotation(np.deg2rad(-10)))
             )),
             #top1
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[0.4,-0.075, 0.725+0.5],
+                    translation=[0.35,-0.075-0.3, 0.725+0.7],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
                         [0, -1, 0]
-                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-90))
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-110))
             )),
             #top2
             RigidTransform_to_transform(
                 RigidTransform(
-                    translation=[0.4,-0.075+0.3, 0.725+0.5],
+                    translation=[0.35,-0.075+0.4, 0.725+0.7],
                     rotation=np.array([
                         [-1, 0, 0],
                         [0, 0, -1],
                         [0, -1, 0]
-                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-90))
+                    ]) @ RigidTransform.x_axis_rotation(np.deg2rad(-70))
             ))
         ]
         
@@ -159,7 +159,18 @@ class GenerateData():
                 draw_camera(scene, [env_idx], self.camera_transforms[i], length = 0.04)
         draw_contacts(scene, scene.env_idxs)
     
-    def generate_point_cloud(self,block_transform,visualize=True):
+    def vis_cam_images(self,image_list):
+        for i in range(0, len(image_list)):
+            plt.figure()
+            im = image_list[i].data
+            # for showing normal map
+            if im.min() < 0:
+                im = im / 2 + 0.5
+            plt.imshow(im)
+        plt.show()
+
+    
+    def generate_point_cloud(self,block_transform,visualize=True, debug=False):
     
         color_list, depth_list, seg_list, normal_list = [], [], [], []
         env_idx = 0
@@ -170,6 +181,13 @@ class GenerateData():
             depth_list.append(frames['depth'])
             seg_list.append(frames['seg'])
             normal_list.append(frames['normal'])
+
+        if debug:
+            self.vis_cam_images(color_list)
+            self.vis_cam_images(depth_list)
+            self.vis_cam_images(seg_list)
+            self.vis_cam_images(normal_list) 
+            import ipdb; ipdb.set_trace()
         
         intrs = [self.camera.get_intrinsics(cam_name) for cam_name in self.camera_names]
 
@@ -200,7 +218,7 @@ class GenerateData():
             points=points[loc_z]
 
 
-            loc_x=np.where(points[:,0]>block_transform.p.x-0.025,True,False)
+            loc_x=np.where(points[:,0]>0.2,True,False)
             points=points[loc_x]
 
             loc_x=np.where(points[:,0]<0.9,True,False)
@@ -244,7 +262,7 @@ class GenerateData():
             # pcd.estimate_normals()
             o3d.visualization.draw_geometries([pcd], point_show_normal=True)
 
-            vis3d.show()
+            # vis3d.show()
 
         return pcd, pcd_downsampled, pcd_downsampled_normals
 
