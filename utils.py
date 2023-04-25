@@ -277,6 +277,10 @@ def quat2rot(quat):
     return mat[:, :3, :3]
 
 def pose_dist_metric(pose1, pose2):
+
+    # !NOTE: TO get the gt pose, use the initial pose: pose1
+    # ! pose_gt = pose1
+    # ! pose_gt.position.z += 0.2    
     delta_t = torch.norm(pose1[:, :3] - pose2[:, :3], p=2, dim=1)
     rot1 = quat2rot(pose1[:, 3:])
     rot2 = quat2rot(pose2[:, 3:])
