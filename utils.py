@@ -102,20 +102,23 @@ def make_inference_row(action_vector,
         row.append(predicted_pose[i].item())
     return row
 
+ header = ['timestamp', 'episode', 'object_type', 'action_vector',
+            'initial_pose_position_x', 'initial_pose_position_y', 'initial_pose_position_z',
+            'initial_pose_orientation_x', 'initial_pose_orientation_y', 'initial_pose_orientation_z', 'initial_pose_orientation_w',
+            'final_pose_position_x', 'final_pose_position_y', 'final_pose_position_z',
+            'final_pose_orientation_x', 'final_pose_orientation_y', 'final_pose_orientation_z', 'final_pose_orientation_w',
+            'entire_pc_path','grasping_pointx','grasping_pointy','grasping_pointz']
+
 def process_row(row, debug=False):
     '''
         row: list of strings
-        return obj, action, init_pose, final_pose, init_img, final_img
+        return obj, action, init_pose, final_pose, point_cloud
     '''
     obj = row[2]
-    action = row[3]
+    # action = row[3]
     action_str = ACTION_DICT[action]
     label_str = f"{action_str}+{obj}"
-    label = LABELS_DICT[label_str]
-    action_vector = []
-    for i in action:
-        action_vector.append(int(i))
-    action_vector = torch.tensor(action_vector)
+
     init_pose = []
     for i in range(7):
         init_pose.append(float(row[4+i]))
@@ -125,16 +128,26 @@ def process_row(row, debug=False):
     for i in range(7):
         final_pose.append(float(row[11+i]))
     final_pose = torch.tensor(final_pose)
-    path = f"data/REAL_DATA"
-    init_img = torchvision.io.read_image(path + row[18])
 
-    final_img = torchvision.io.read_image(path + row[19])
+    pc_np = np.asarray(o3d.io.read_point_cloud(row[-4]).points)
+    pc_ten=torch.tensor(pc_np)
 
-    return label, action_vector, init_pose, final_pose, init_img, final_img
+    #label calculation
+    ''' 
+    [0,1]: Top grasp
+    [1,0]: Wrap grasp
+    '''
+    max_z=0.8665
+    label=torch.randint(1,3,(len(pc_ten,2)))
+    label_bol=torch.where(pc_ten[:,2]>0.98*max_z,torch.tensor([0,1]),torch.tensor([1,0]))
+    label[label_bol]=torch.tensor([0,1])
+    label[~label_bol]=torch.tensor([1,0])
+
+    return label, action_vector, init_pose, final_pose, pc_ten
 
 
 
-def make_data_dict(list_dirs, save_filename ,debug=False):
+def make_data_dict(list_dirs, save_filename ,debug=False, save_data=True):
     if(debug):
         import ipdb; ipdb.set_trace()
     data_dict = []
@@ -147,18 +160,20 @@ def make_data_dict(list_dirs, save_filename ,debug=False):
             reader = csv.reader(f)
             next(reader)
             for row in reader:
-                label, action_vector, init_pose, final_pose, init_img, final_img = process_row(row,debug)
+                label, action_vector, init_pose, final_pose, pc = process_row(row,debug)
                 data_dict.append({
                                 "label": label,
                                 "action_vector": action_vector,
                                 "init_pose":init_pose,
                                 "final_pose":final_pose,
-                                "init_img":init_img,
-                                "final_img":final_img})
-
-    save_location = f"{os.getcwd()}/training_data/{save_filename}.pt"
-    print(f"Saving data to {save_location}")
-    torch.save(data_dict, save_location)
+                                "point_cloud":pc,
+                                })
+    if save_data:
+        if not os.path.exists('./training_data'):
+            os.mkdir('./training_data')
+        save_location = f"./training_data/{save_filename}.pt"
+        print(f"Saving data to {save_location}")
+        torch.save(data_dict, save_location)
     return data_dict
 
 def make_normalized_data_dict(list_dirs, save_filename ,debug=False):
