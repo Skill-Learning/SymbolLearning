@@ -176,7 +176,7 @@ class GraspPointPolicy(Policy):
             self._franka.set_ee_transform(env_idx, self._franka_name, self._init_ee_transforms[env_idx])
 
         if t_step == 700:
-            self._franka.set_joints(env_idx, self._franka_name, self._init_joints)
+            self._franka.set_joints(env_idx, self._franka_name, self._init_joint_values)
             self._franka.set_rb_states(env_idx, self._franka_name, self._init_rbs)
 
 
@@ -260,7 +260,7 @@ class EEImpedanceWaypointPolicy(Policy):
 
 
 class GraspPolicy(Policy):
-    def __init__(self, franka, franka_name, block, block_name, points, point_normals, n_envs, centroid_point =None , *args, **kwargs):
+    def __init__(self, franka, franka_name, block, block_name, points, point_normals, n_envs, centroid_point =None, final_poses= None , grasping_points = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         """
@@ -276,13 +276,21 @@ class GraspPolicy(Policy):
 
         self._franka = franka
         self._franka_name = franka_name
-        self._time_horizon = 710
+        self._time_horizon = 1080
         self._block = block
         self._block_name = block_name
         self._points = points
         self._point_normals = point_normals
         self._n_envs = n_envs
         self._centroid = centroid_point
+        self.vertical_grip = [False]*n_envs 
+        self._init_joint_values = np.array([0, -np.pi/4,
+                                            0,-3*np.pi/4,
+                                             0, np.pi/2,
+                                              0, 3.99e-2,
+                                               4.00e-2 ])
+        self._final_poses = final_poses
+        self._grasping_points = grasping_points
         self.reset()
 
     def reset(self):
@@ -291,9 +299,18 @@ class GraspPolicy(Policy):
         self._init_ee_transforms = []
         self._ee_waypoint_policies = []
         self._post_grasp_transforms = []
-
+        self._gripper_orientation_transforms = []
+        self._pre_pre_grasp_transforms = []
     @abstractmethod
     def _get_grasp_transform(self, env_idx):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _get_gripper_orientation_transform(self, env_idx, grasp_transform, ee_transform):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _get_pre_pre_grasp_transform(self, env_idx, grasp_transform, ee_transform):
         raise NotImplementedError
 
     @abstractmethod
@@ -314,118 +331,96 @@ class GraspPolicy(Policy):
             grasp_transform = self._get_grasp_transform(env_idx, ee_transform)
             self._grasp_transforms.append(grasp_transform)
             self._pre_grasp_transforms.append(self._get_pre_grasp_transform(env_idx, grasp_transform))
-            post_grasp_transform = gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.2), r=grasp_transform.r)
+            post_grasp_transform = gymapi.Transform(p=grasp_transform.p + gymapi.Vec3(0, 0, 0.1), r=grasp_transform.r)
             self._post_grasp_transforms.append(post_grasp_transform)
+            self._gripper_orientation_transforms.append(self._get_gripper_orientation_transform(env_idx, grasp_transform, ee_transform))
+            self._pre_pre_grasp_transforms.append(self._get_pre_pre_grasp_transform(env_idx, grasp_transform, ee_transform))
 
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._gripper_orientation_transforms[env_idx])
+
+        if t_step == 200:
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._pre_pre_grasp_transforms[env_idx])
+
+        if t_step == 300:
             self._franka.set_ee_transform(env_idx, self._franka_name, self._pre_grasp_transforms[env_idx])
 
-        if t_step == 100:
+        if t_step == 400:
             self._franka.set_ee_transform(env_idx, self._franka_name, self._grasp_transforms[env_idx])
 
-        if t_step == 150:
+        if t_step == 450:
             self._franka.close_grippers(env_idx, self._franka_name)
         
-        if t_step == 250:
+        if t_step == 550:
             self._franka.set_ee_transform(env_idx, self._franka_name, self._post_grasp_transforms[env_idx])
 
-        if t_step == 350:
+
+        if t_step == 640:
+            block_pose = self._block.get_rb_poses_as_np_array(env_idx, self._block_name)
+            self._final_poses[env_idx] = block_pose
+        if t_step == 650:
             self._franka.set_ee_transform(env_idx, self._franka_name, self._grasp_transforms[env_idx])
 
-        if t_step == 500:
+        if t_step == 700:
             self._franka.open_grippers(env_idx, self._franka_name)
 
 
-        if t_step == 550:
-            self._franka.set_ee_transform(env_idx, self._franka_name, self._pre_grasp_transforms[env_idx])
+        if t_step == 850:
+            self._franka.set_ee_transform(env_idx, self._franka_name, self._post_grasp_transforms[env_idx])
 
-        if t_step == 600:
+        if t_step == 950:
             self._franka.set_ee_transform(env_idx, self._franka_name, self._init_ee_transforms[env_idx])
 
-        if t_step == 700:
+        if t_step == 1050:
             self._franka.set_joints(env_idx, self._franka_name, self._init_joints)
             self._franka.set_rb_states(env_idx, self._franka_name, self._init_rbs)
     
-class GraspPointXPolicy(GraspPolicy):
-
-    def _get_grasp_transform(self, env_idx, ee_transform):
-        # pc = np.asarray(self._points[env_idx].points)
-        # max_z_idx = np.argmax(pc[:,2])
-        random_index = np.random.randint(0, self._n_envs)
-        random_index = 0
-
-        # import ipdb; ipdb.set_trace()
-        grasping_location = np.asarray(self._points[env_idx].points)[random_index]
-
-        grasping_normal = -self._point_normals[env_idx][random_index]
-
-        # align the z-axis of the gripper with the normal of the point
-        gripper_transform = transform_to_RigidTransform(ee_transform)
-        gripper_z = gripper_transform.z_axis
-
-        rotation_matrix = rotation_between_axes(gripper_z, grasping_normal)
-
-        # rotate the ee_transform with the rotation matrix
-        grasp_transform = RigidTransform(
-            translation=grasping_location,
-            rotation = gripper_transform.rotation @ rotation_matrix,
-        )
-
-        # grasp_transform = RigidTransform(
-        #     translation=grasping_location,
-        #     rotation = gripper_transform.rotation,
-        # )
-
-        return RigidTransform_to_transform(grasp_transform)
-
-    
-    def _get_pre_grasp_transform(self, env_idx, grasp_transform):
-        
-        grasp_rigid_transform = transform_to_RigidTransform(grasp_transform)
-
-        grasp_z = grasp_rigid_transform.z_axis
-
-        pre_grasp_transform = RigidTransform(
-            translation=grasp_rigid_transform.translation + 0.1 * np.array([0, 0, 1]),
-            rotation=grasp_rigid_transform.rotation,
-        )
-
-        return RigidTransform_to_transform(pre_grasp_transform)
-
-
 
 class GraspPointYPolicy(GraspPolicy):
 
     def _get_grasp_transform(self, env_idx, ee_transform):
-        random_index = np.random.randint(0, self._n_envs)
-        random_index = 0
-        grasping_location = np.asarray(self._points[env_idx].points)[random_index]
+        random_index = np.random.randint(0, 9)
+        grasping_location = self._points[env_idx][0][random_index]
+        self._grasping_points[env_idx] = grasping_location
         grasping_normal = -self._point_normals[env_idx][random_index]
-        vertical_grip = False
-        if np.allclose(grasping_normal, np.array([0, 0, -1])):
-            vertical_grip = True
-        
+        # grasping_location += 0.01 * grasping_normal
+        if np.allclose(grasping_normal, np.array([0, 0, -1])) or np.allclose(grasping_normal, np.array([0, 0, 1])):
+            self.vertical_grip[env_idx] = True
+            grasping_normal = np.array([0, 0, -1])
+
         # align the z-axis of the gripper with the normal of the point
         gripper_transform = transform_to_RigidTransform(ee_transform)
-        gripper_z = gripper_transform.z_axis
 
-        rotation_matrix = rotation_between_axes(gripper_z, grasping_normal)
+        angle = np.arctan2(grasping_location[1] - self._centroid[env_idx][1], 
+                            grasping_location[0] - self._centroid[env_idx][0])
 
-        if vertical_grip:
-            angle = np.arctan2(grasping_location[1] - self._centroid[env_idx][1], 
-                                grasping_location[0] - self._centroid[env_idx][0])
+        angle_1 = np.pi/2 - abs(angle + np.pi )
+        angle = angle_1
+
+        if self.vertical_grip[env_idx]:
+            self._franka.set_gripper_width_target(env_idx, self._franka_name, 0.025)
+            grasping_location += 0.01 * grasping_normal
+            grasp_transform = RigidTransform(
+                translation=grasping_location,
+                rotation = gripper_transform.rotation @ RigidTransform.z_axis_rotation(angle),
+                )
+            return RigidTransform_to_transform(grasp_transform)
         
         else:
-            angle = 0
+            self._franka.set_gripper_width_target(env_idx, self._franka_name, 0.2)
 
+            # align the z-axis of the gripper with the normal of the point
+            gripper_z = gripper_transform.z_axis
+            # rotation_matrix = rotation_between_axes(gripper_z, grasping_normal)
+            grasp_transform = RigidTransform(
+                translation=np.array([self._centroid[env_idx][0], self._centroid[env_idx][1], grasping_location[2]]),
+                # rotation = rotation_matrix @ RigidTransform.z_axis_rotation(-np.pi/2)
+                # rotation = gripper_transform.rotation @rotation_matrix,
+                rotation = gripper_transform.rotation @ RigidTransform.y_axis_rotation(np.pi/2) @ RigidTransform.x_axis_rotation(angle),
+            )
+            grasp_y = grasp_transform.y_axis
+            # grasp_transform.position += 0.01 * grasp_y
 
-        # rotate the ee_transform with the rotation matrix
-        grasp_transform = RigidTransform(
-            translation=grasping_location,
-            rotation = gripper_transform.rotation @ rotation_matrix @ RigidTransform.z_axis_rotation(angle),
-        )
-
-        return RigidTransform_to_transform(grasp_transform)
-
+            return RigidTransform_to_transform(grasp_transform)
     
     def _get_pre_grasp_transform(self, env_idx, grasp_transform):
         
@@ -433,12 +428,63 @@ class GraspPointYPolicy(GraspPolicy):
 
         grasp_z = grasp_rigid_transform.z_axis
 
+
         pre_grasp_transform = RigidTransform(
-            translation=grasp_rigid_transform.translation - 0.1 * grasp_z,
+            translation=grasp_rigid_transform.translation - 0.05 * grasp_z,
             rotation=grasp_rigid_transform.rotation,
         )
 
+        if not self.vertical_grip[env_idx]:
+            pre_grasp_transform.position -= 0.1 * grasp_z
+
+
         return RigidTransform_to_transform(pre_grasp_transform)
+    
+    def _get_gripper_orientation_transform(self, env_idx, grasp_transform, ee_transform):
+
+        ee_tf = transform_to_RigidTransform(ee_transform)
+        grasp_tf = transform_to_RigidTransform(grasp_transform)
+
+        grip_orient_tf = RigidTransform(
+            translation = ee_tf.translation,
+            rotation = grasp_tf.rotation)
+        
+        return RigidTransform_to_transform(grip_orient_tf)
+
+        # angle = np.arctan2(grasp_tf.translation[1] - self._centroid[env_idx][1],
+        #                     grasp_tf.translation[0] - self._centroid[env_idx][0])
+        
+        # angle_1 = np.pi/2 - abs(angle + np.pi )
+        # angle = angle_1
+
+        # if self.vertical_grip[env_idx]:
+        #     grip_orient_tf = RigidTransform(
+        #         translation=ee_tf.translation,
+        #         rotation = ee_tf.rotation @ RigidTransform.z_axis_rotation(angle),
+        #     )
+        #     return RigidTransform_to_transform(grip_orient_tf)
+        # else:
+        #     grip_orient_tf = RigidTransform(
+        #         translation=ee_tf.translation,
+        #         rotation = ee_tf.rotation @ RigidTransform.y_axis_rotation(np.pi/2) @ RigidTransform.x_axis_rotation(angle),
+        #     )
+        #     return RigidTransform_to_transform(grip_orient_tf)
+    
+    def _get_pre_pre_grasp_transform(self, env_idx, grasp_transform, ee_transform):
+
+        ee_tf = transform_to_RigidTransform(ee_transform)
+        grasp_tf = transform_to_RigidTransform(grasp_transform)
+
+        pre_pre_grasp_position = np.array([grasp_tf.position[0], grasp_tf.position[1], ee_tf.position[2]])
+        grasp_z = grasp_tf.z_axis
+        if not self.vertical_grip[env_idx]:
+            pre_pre_grasp_position -= 0.1 * grasp_z
+        pre_pre_grasp_transform = RigidTransform(
+            translation = pre_pre_grasp_position,
+            rotation = grasp_tf.rotation,
+        )
+
+        return RigidTransform_to_transform(pre_pre_grasp_transform)
 
 class GraspPointBehindPolicy(GraspPolicy):
 

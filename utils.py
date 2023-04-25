@@ -7,7 +7,7 @@ from datetime import datetime
 import os
 import csv
 from labels_dict import *
-import open3d
+import open3d as o3d
 import torchvision.transforms as T
 
 def init_weights_and_freeze(model_tgt, model_src, freeze_layers = []):
@@ -39,7 +39,7 @@ def load_data_dict(filename, data_split=0.75):
     data_dict = torch.load(f"{os.getcwd()}/training_data/{filename}.pt")
     
     train_data, test_data = torch.utils.data.random_split(
-                                data_dict,
+                                data_dict,cd_rest=o3d.geometry.PointCloud()
                                  [int(data_split*len(data_dict)), len(data_dict)-int(data_split*len(data_dict))], 
                                  generator=torch.Generator().manual_seed(42))
     return train_data, test_data
@@ -49,7 +49,7 @@ def load_data_without_split(filename):
     return data_dict
 
 def make_data_row(episode_num, action_vector, 
-                    init_pose, point_cloud, point_cloud_downsampled, final_pose, data_dir, env_idx, obj_type="std_cube"):
+                    init_pose, point_cloud, final_pose, data_dir, env_idx, grasping_point,obj_type="std_cube"):
     '''
         make a row of data for training
     '''
@@ -72,16 +72,15 @@ def make_data_row(episode_num, action_vector,
     
     if not os.path.exists(data_dir+'/point_clouds'):
         os.mkdir(data_dir+'/point_clouds')
-    if not os.path.exists(data_dir+'/point_cloud_downsampled'):
-        os.mkdir(data_dir+'/point_cloud_downsampled')
 
-    point_cloud_path = f"{data_dir}/point_cloud_downsampled/{episode_num}_{env_idx}_init_image_{timestamp}.ply"
-    open3d.io.write_point_cloud(point_cloud_path, point_cloud_downsampled)
+    pcd_rest=o3d.geometry.PointCloud()
+    pcd_rest.points = o3d.utility.Vector3dVector(point_cloud)
+    point_cloud_path = f"{data_dir}/point_clouds/{episode_num}_{env_idx}_{timestamp}.pcd"
+    o3d.io.write_point_cloud(point_cloud_path, pcd_rest)
     row.append(point_cloud_path)
+    for i in range(3):
+        row.append(grasping_point[0][i].item())
 
-    point_cloud_path = f"{data_dir}/point_clouds/{episode_num}_{env_idx}_init_image_{timestamp}.ply"
-    open3d.io.write_point_cloud(point_cloud_path, point_cloud)
-    row.append(point_cloud_path)
     return row
 
 def make_inference_row(action_vector, 
@@ -345,3 +344,23 @@ def farthest_point_sampling(pts, k, initial_idx=None, metrics=l2_norm,
         distances[:, i, :] = dist
         min_distances = np.minimum(min_distances, dist)
     return indices, distances
+
+
+
+def normalize_point_cloud(point_cloud):
+    """
+    point_cloud: tensor (B, N, 3)
+    
+    return: tensor (B, N, 3)
+    
+    """
+
+    if point_cloud.shape[1] == 1:
+        return point_cloud
+    
+    centroid = torch.mean(point_cloud, dim=1, keepdim=True)
+    point_cloud = point_cloud - centroid
+    furthest_distance = torch.max(torch.sqrt(torch.sum(point_cloud ** 2, dim=-1, keepdim=True)), dim=1, keepdim=True)[0]
+    point_cloud = point_cloud / furthest_distance
+    return point_cloud
+

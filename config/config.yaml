@@ -1,15 +1,15 @@
 flags:
-  visualize: True
-  save_data: False
+  visualize: False
+  save_data: True
 
 point_cloud:
-  num_points: 100
+  num_points: 10
   vox_size: 0.005
 
 scene:
-  n_envs: 3
+  n_envs: 1
   es: 1
-  gui: 1
+  gui: 0
   cam:
     cam_pos: [1.2, 0, 1.2]
     look_at: [0.5, 0, 1]
@@ -54,9 +54,22 @@ franka:
 
 table:
   dims:
-    sx: 2
-    sy: 2
+    sx: 1
+    sy: 1
     sz: 0.5
+  shape_props:
+    friction: 0.1 #0.1
+    rolling_friction: 0
+    torsion_friction: 0
+    thickness: 2e-3
+  asset_options:
+    fix_base_link: True
+
+podium:
+  dims:
+    sx: 0.1
+    sy: 0.1
+    sz: 0.35
   shape_props:
     friction: 0.1 #0.1
     rolling_friction: 0
@@ -96,19 +109,19 @@ block:
 urdf:
   urdf_path: pybullet/orange_cup/model.urdf
   shape_props:
-    friction: 0.2
+    friction: 0.8
     rolling_friction: 0.01
     torsion_friction: 0.01
     thickness: 2e-3
   rb_props:
     texture: pybullet/orange_cup/texture_map.jpg
   asset_options:
-    density: 500
+    density: 100
 camera:
   width: 320
   height: 240
 
-num_cameras: 7
+num_cameras: 5
 
 # ______________________________________________________________________________
 # Learning Parameters
@@ -132,7 +145,7 @@ data:
   use_saved_data: True
   filename: synthetic_data_
   train_split: 0.75
-  num_episodes: 300
+  num_episodes: 5000
 
 logging:
   log_enable: True
