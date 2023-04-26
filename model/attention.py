@@ -25,12 +25,19 @@ class PairwiseAttentionBlock(nn.Module):
             nn.ReLU(),
         )
 
-        self.aggregation_mlp = nn.Sequential(
+        self._norm_and_activate_1 = nn.Sequential(
             nn.BatchNorm1d(self.num_points),
-            nn.ReLU(),
-            nn.Linear(self.num_points, self.out_feats),
+            nn.ReLU()
+        )
+
+
+        self.aggregation_mlp = nn.Sequential(
+            nn.Linear(self.num_points, self.out_feats)
+        )
+
+        self._norm_and_activate_2 = nn.Sequential(
             nn.BatchNorm1d(self.out_feats),
-            nn.ReLU(),
+            nn.ReLU()
         )
 
         
@@ -40,7 +47,6 @@ class PairwiseAttentionBlock(nn.Module):
         :param grasping_point_features: (B, in_feats)
         :return: (B, num_points ,out_feats)
         """        
-
 
         grasping_point_features = grasping_point_features.unsqueeze(1)
 
@@ -54,6 +60,10 @@ class PairwiseAttentionBlock(nn.Module):
 
         aggregated_features = torch.bmm(gamma, beta.transpose(1, 2)) # (B, num_points, num_points)
 
-        aggregated_features = self.aggregation_mlp(aggregated_features) # (B, num_points, out_feats)
+        aggregated_features = self._norm_and_activate_1(aggregated_features.transpose(2,1)) # (B, num_points, num_points)
+        aggregated_features = self.aggregation_mlp(aggregated_features.transpose(2,1)) # (B, num_points, out_feats)
 
-        return aggregated_features
+
+        aggregated_features = self._norm_and_activate_2(aggregated_features.transpose(2,1)) # (B, num_points, out_feats)
+
+        return aggregated_features.transpose(1, 2) # (B, out_feats, num_points)

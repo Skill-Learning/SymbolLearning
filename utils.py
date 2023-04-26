@@ -146,11 +146,10 @@ def process_row(row, debug=False):
     [1,0]: Wrap grasp
     '''
     max_z=0.8665
-    label=torch.randint(1,3,(len(pc_ten),2))
-    label_bol=torch.where(pc_ten[:,2]>0.98*max_z,True,False)
-    label[label_bol]=torch.tensor([0,1])
-    label[~label_bol]=torch.tensor([1,0])
-
+    if grasping_point[2]>max_z:
+        label=torch.tensor([0,1])
+    else:
+        label=torch.tensor([1,0])
     return label, init_pose, final_pose, pc_ten, grasping_point
 
 
@@ -169,7 +168,7 @@ def make_data_dict(list_dirs, save_filename ,debug=False, save_data=True):
             next(reader)
             for row in reader:
                 label, init_pose, final_pose, pc, grasping_point = process_row(row,debug)
-                normalized_pc= normalize_point_cloud(pc, grasping_point)
+                normalized_pc, grasping_point= normalize_point_cloud(pc, grasping_point)
                 ideal_pose = init_pose
                 ideal_pose[2] +=0.2
                 final_pose = final_pose.unsqueeze(0)

@@ -129,45 +129,24 @@ num_cameras: 5
 device: cuda:0
 debug: False
 verbose: True
-image_encoder:
-  type: ResNet18
-  use_pretrained: True
-  
-coarse_training:
-  batch_size:
-    train: 48
-    val: 32
-  epochs: 50
-  lr: 0.0001
-  metadata_size: 13
+
+
 
 data:
-  use_saved_data: True
-  filename: synthetic_data_
-  train_split: 0.75
-  num_episodes: 5000
+  num_points: 607
+  train_split: 0.9
+  filename: point_clouds
+  use_saved_data: False
 
 logging:
   log_enable: True
-  comment: real_data_posenet
-
-fine_training:
-  batch_size:
-    train: 5
-    val: 5
-  epochs: 150
-  lr: 0.00002
-  use_saved_data: True
-  save_filename: real_data_resized
-  encoder_weights: checkpoints/synthetic_data__20221204_225624/18.pth
-  pose_weights: checkpoints/fine_training/real_data_resized_20221205_154924/34.pth
-  inference_dir: inference_files
+  comment: point_clouds
 
 anet_training:
-  batch_size:
-    train: 5
-    val: 5
+  batch_size: 
+    train: 64
+    val: 1
   epochs: 150
-  lr: 0.00002
-  use_saved_data: True
+  lr: 0.001
+  use_saved_data: False
   dropout: 0.3
