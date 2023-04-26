@@ -1,6 +1,6 @@
 flags:
   visualize: False
-  save_data: True
+  save_data: False
 
 point_cloud:
   num_points: 10
@@ -162,3 +162,12 @@ fine_training:
   encoder_weights: checkpoints/synthetic_data__20221204_225624/18.pth
   pose_weights: checkpoints/fine_training/real_data_resized_20221205_154924/34.pth
   inference_dir: inference_files
+
+anet_training:
+  batch_size:
+    train: 5
+    val: 5
+  epochs: 150
+  lr: 0.00002
+  use_saved_data: True
+  dropout: 0.3

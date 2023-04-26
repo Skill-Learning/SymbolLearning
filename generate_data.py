@@ -256,7 +256,7 @@ class GenerateData():
             
         
         point_cloud=np.concatenate(point_cloud)
-        
+        import ipdb; ipdb.set_trace()
         #Change Normals
         min_z = np.min(point_cloud[:,2])
         max_z = np.max(point_cloud[:,2])
