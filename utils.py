@@ -102,22 +102,25 @@ def make_inference_row(action_vector,
         row.append(predicted_pose[i].item())
     return row
 
- header = ['timestamp', 'episode', 'object_type', 'action_vector',
-            'initial_pose_position_x', 'initial_pose_position_y', 'initial_pose_position_z',
-            'initial_pose_orientation_x', 'initial_pose_orientation_y', 'initial_pose_orientation_z', 'initial_pose_orientation_w',
-            'final_pose_position_x', 'final_pose_position_y', 'final_pose_position_z',
-            'final_pose_orientation_x', 'final_pose_orientation_y', 'final_pose_orientation_z', 'final_pose_orientation_w',
-            'entire_pc_path','grasping_pointx','grasping_pointy','grasping_pointz']
+#  header = ['timestamp', 'episode', 'object_type', 'action_vector',
+#             'initial_pose_position_x', 'initial_pose_position_y', 'initial_pose_position_z',
+#             'initial_pose_orientation_x', 'initial_pose_orientation_y', 'initial_pose_orientation_z', 'initial_pose_orientation_w',
+#             'final_pose_position_x', 'final_pose_position_y', 'final_pose_position_z',
+#             'final_pose_orientation_x', 'final_pose_orientation_y', 'final_pose_orientation_z', 'final_pose_orientation_w',
+#             'entire_pc_path','grasping_pointx','grasping_pointy','grasping_pointz']
 
 def process_row(row, debug=False):
     '''
         row: list of strings
         return obj, action, init_pose, final_pose, point_cloud
     '''
+    if debug:
+        import ipdb; ipdb.set_trace()
+
     obj = row[2]
     # action = row[3]
-    action_str = ACTION_DICT[action]
-    label_str = f"{action_str}+{obj}"
+    # action_str = ACTION_DICT[action]
+    # label_str = f"{action_str}+{obj}"
 
     init_pose = []
     for i in range(7):
@@ -143,12 +146,12 @@ def process_row(row, debug=False):
     [1,0]: Wrap grasp
     '''
     max_z=0.8665
-    label=torch.randint(1,3,(len(pc_ten,2)))
-    label_bol=torch.where(pc_ten[:,2]>0.98*max_z,torch.tensor([0,1]),torch.tensor([1,0]))
+    label=torch.randint(1,3,(len(pc_ten),2))
+    label_bol=torch.where(pc_ten[:,2]>0.98*max_z,True,False)
     label[label_bol]=torch.tensor([0,1])
     label[~label_bol]=torch.tensor([1,0])
 
-    return label, action_vector, init_pose, final_pose, pc_ten, grasping_point
+    return label, init_pose, final_pose, pc_ten, grasping_point
 
 
 
@@ -165,13 +168,17 @@ def make_data_dict(list_dirs, save_filename ,debug=False, save_data=True):
             reader = csv.reader(f)
             next(reader)
             for row in reader:
-                label, action_vector, init_pose, final_pose, pc, grasping_point = process_row(row,debug)
+                label, init_pose, final_pose, pc, grasping_point = process_row(row,debug)
+                normalized_pc= normalize_point_cloud(pc, grasping_point)
+                ideal_pose = init_pose
+                ideal_pose[2] +=0.2
+                final_pose = final_pose.unsqueeze(0)
+                ideal_pose = ideal_pose.unsqueeze(0)
+                pose_dist = pose_dist_metric(final_pose, ideal_pose)
                 data_dict.append({
                                 "label": label,
-                                "action_vector": action_vector,
-                                "init_pose":init_pose,
-                                "final_pose":final_pose,
-                                "point_cloud":pc,
+                                "pose_dist": pose_dist,
+                                "point_cloud":normalized_pc,
                                 "grasping_point":grasping_point
                                 })
     if save_data:
@@ -182,78 +189,21 @@ def make_data_dict(list_dirs, save_filename ,debug=False, save_data=True):
         torch.save(data_dict, save_location)
     return data_dict
 
-def make_normalized_data_dict(list_dirs, save_filename ,debug=False):
-    if(debug):
-        import ipdb; ipdb.set_trace()
-    transform = T.Resize(size = (320, 240))
-    data_dict = []
-    for dir in list_dirs:
-        if(debug):
-            print(f"Processing {dir}")
-        dir_path = os.path.join(os.getcwd(), f"data/{dir}")
-        csv_path = f"{dir_path}/data.csv"
-        with open(csv_path, 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            for row in reader:
-                label, action_vector, init_pose, final_pose, init_img, final_img = process_row(row,debug)
-                init_img = transform(init_img)
-                data_dict.append({
-                                "label": label,
-                                "action_vector": action_vector,
-                                "init_pose":init_pose,
-                                "final_pose":final_pose,
-                                "init_img":init_img,
-                                "final_img":final_img, 
-                                "delta_gt": final_pose - init_pose})
-        
-    
+def load_point_cloud_dict(filename):
+    save_location = f"{os.getcwd()}/training_data/{filename}.pt"
+    print(f"Loading data from {save_location}")
+    data_dict = torch.load(save_location)
 
-    save_location = f"{os.getcwd()}/training_data/{save_filename}.pt"
-    print(f"Saving data to {save_location}")
-    torch.save(data_dict, save_location)
+    pose_dist = torch.tensor([])
+    for i in range(len(data_dict)):
+        pose_dist = torch.cat((pose_dist, data_dict[i]["pose_dist"]), dim=0)
+    mean = torch.mean(pose_dist, dim=0)
+    std = torch.std(pose_dist, dim=0)
+
+    for i in range(len(data_dict)):
+        data_dict[i]["pose_dist"] = (data_dict[i]["pose_dist"] - mean)/std
+
     return data_dict
-
-def load_normalized_data_dict(filename):
-    save_location = f"{os.getcwd()}/training_data/{filename}.pt"
-    print(f"Loading data from {save_location}")
-    data_dict = torch.load(save_location)
-
-    delta_gt = torch.tensor([])
-    for i in range(len(data_dict)):
-        delta_gt = torch.cat((delta_gt, data_dict[i]["delta_gt"]), dim=0)
-    mean = torch.mean(delta_gt, dim=0)
-    std = torch.std(delta_gt, dim=0)
-
-    for i in range(len(data_dict)):
-        data_dict[i]["delta_gt"] = (data_dict[i]["delta_gt"] - mean)/std
-
-    return data_dict, mean, std
-
-
-
-def load_normalized_coarse_data_dict(filename):
-    save_location = f"{os.getcwd()}/training_data/{filename}.pt"
-    print(f"Loading data from {save_location}")
-    data_dict = torch.load(save_location)
-
-    delta_gt = torch.tensor([])
-    init_poses = torch.tensor([])
-    for i in range(len(data_dict)):
-        init_poses = torch.cat((init_poses, data_dict[i]["init_pose"]), dim=0)
-        delta_gt = torch.cat((delta_gt, data_dict[i]["delta_gt"]), dim=0)
-    mean_delta_gt = torch.mean(delta_gt, dim=0)
-    std_delta_gt = torch.std(delta_gt, dim=0)
-
-    mean_init_pose = torch.mean(init_poses, dim=0)
-    std_init_pose = torch.std(init_poses, dim=0)
-
-
-    for i in range(len(data_dict)):
-        data_dict[i]["init_pose"] = (data_dict[i]["init_pose"] - mean_init_pose)/std_init_pose
-        data_dict[i]["delta_gt"] = (data_dict[i]["delta_gt"] - mean_delta_gt)/std_delta_gt
-
-    return data_dict, mean_init_pose, std_init_pose, mean_delta_gt, std_delta_gt
 
 def quat2rot(quat):
     '''
@@ -286,7 +236,7 @@ def pose_dist_metric(pose1, pose2):
     delta_t = torch.norm(pose1[:, :3] - pose2[:, :3], p=2, dim=1)
     rot1 = quat2rot(pose1[:, 3:])
     rot2 = quat2rot(pose2[:, 3:])
-    delta_rot = torch.norm(torch.bmm(rot1, rot2.transpose(1, 2)) - torch.eye(3).cuda(), p=2, dim=(1, 2))
+    delta_rot = torch.norm(torch.bmm(rot1, rot2.transpose(1, 2)) - torch.eye(3), p=2, dim=(1, 2))
     return delta_t + delta_rot
 
 def l2_norm(x, y):
@@ -368,20 +318,25 @@ def farthest_point_sampling(pts, k, initial_idx=None, metrics=l2_norm,
 
 
 
-def normalize_point_cloud(point_cloud):
+def normalize_point_cloud(point_cloud, grasping_point = None):
     """
-    point_cloud: tensor (B, N, 3)
-    
-    return: tensor (B, N, 3)
-    
+    :param point_cloud: tensor (N, 3)
+    :param grasping_point: tensor (3)
+
+    return: tensor (N, 3)
+    return: tensor (3)
     """
 
-    if point_cloud.shape[1] == 1:
+    if point_cloud.shape[0] == 1:
+        return point_cloud, grasping_point
+    
+    centroid = torch.mean(point_cloud, dim=0, keepdim=True)
+    point_cloud = point_cloud - centroid
+    furthest_distance = torch.max(torch.sqrt(torch.sum(point_cloud ** 2, dim=-1, keepdim=True)), dim=0, keepdim=True)[0]
+    point_cloud = point_cloud / furthest_distance
+    if grasping_point is None:
         return point_cloud
     
-    centroid = torch.mean(point_cloud, dim=1, keepdim=True)
-    point_cloud = point_cloud - centroid
-    furthest_distance = torch.max(torch.sqrt(torch.sum(point_cloud ** 2, dim=-1, keepdim=True)), dim=1, keepdim=True)[0]
-    point_cloud = point_cloud / furthest_distance
-    return point_cloud
+    grasping_point = (grasping_point - centroid) / furthest_distance
 
+    return point_cloud, grasping_point
