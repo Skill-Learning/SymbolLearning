@@ -129,6 +129,11 @@ def process_row(row, debug=False):
         final_pose.append(float(row[11+i]))
     final_pose = torch.tensor(final_pose)
 
+    grasping_point=[]
+    for i in range(3):
+        grasping_point.append(float(row[-3+i]))
+    grasping_point=torch.tensor(grasping_point)
+
     pc_np = np.asarray(o3d.io.read_point_cloud(row[-4]).points)
     pc_ten=torch.tensor(pc_np)
 
@@ -143,7 +148,7 @@ def process_row(row, debug=False):
     label[label_bol]=torch.tensor([0,1])
     label[~label_bol]=torch.tensor([1,0])
 
-    return label, action_vector, init_pose, final_pose, pc_ten
+    return label, action_vector, init_pose, final_pose, pc_ten, grasping_point
 
 
 
@@ -160,13 +165,14 @@ def make_data_dict(list_dirs, save_filename ,debug=False, save_data=True):
             reader = csv.reader(f)
             next(reader)
             for row in reader:
-                label, action_vector, init_pose, final_pose, pc = process_row(row,debug)
+                label, action_vector, init_pose, final_pose, pc, grasping_point = process_row(row,debug)
                 data_dict.append({
                                 "label": label,
                                 "action_vector": action_vector,
                                 "init_pose":init_pose,
                                 "final_pose":final_pose,
                                 "point_cloud":pc,
+                                "grasping_point":grasping_point
                                 })
     if save_data:
         if not os.path.exists('./training_data'):
@@ -277,10 +283,6 @@ def quat2rot(quat):
     return mat[:, :3, :3]
 
 def pose_dist_metric(pose1, pose2):
-
-    # !NOTE: TO get the gt pose, use the initial pose: pose1
-    # ! pose_gt = pose1
-    # ! pose_gt.position.z += 0.2    
     delta_t = torch.norm(pose1[:, :3] - pose2[:, :3], p=2, dim=1)
     rot1 = quat2rot(pose1[:, 3:])
     rot2 = quat2rot(pose2[:, 3:])
