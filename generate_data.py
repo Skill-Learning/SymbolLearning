@@ -392,7 +392,7 @@ if __name__=='__main__':
             'initial_pose_orientation_x', 'initial_pose_orientation_y', 'initial_pose_orientation_z', 'initial_pose_orientation_w',
             'final_pose_position_x', 'final_pose_position_y', 'final_pose_position_z',
             'final_pose_orientation_x', 'final_pose_orientation_y', 'final_pose_orientation_z', 'final_pose_orientation_w',
-            'indices', 'entire_pc_path','grasping_pointx','grasping_pointy','grasping_pointz']
+            'entire_pc_path','grasping_pointx','grasping_pointy','grasping_pointz']
 
 
     curr_date = datetime.now().strftime("%Y%m%d")
