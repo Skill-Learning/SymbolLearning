@@ -145,8 +145,8 @@ def process_row(row, debug=False):
     [0,1]: Top grasp
     [1,0]: Wrap grasp
     '''
-    max_z=0.8665
-    if grasping_point[2]>max_z:
+    max_z=0.866
+    if grasping_point[2]>0.98*max_z:
         label=torch.tensor([0,1])
     else:
         label=torch.tensor([1,0])
@@ -339,3 +339,7 @@ def normalize_point_cloud(point_cloud, grasping_point = None):
     grasping_point = (grasping_point - centroid) / furthest_distance
 
     return point_cloud, grasping_point
+
+
+
+

@@ -4,7 +4,7 @@ import numpy as np
 
 
 list_dirs = [20230424]
-save_filename = f"point_clouds"
+save_filename = f"point_clouds_correctted"
 
 data_dict = make_data_dict(list_dirs, save_filename)
 

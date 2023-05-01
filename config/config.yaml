@@ -9,7 +9,7 @@ point_cloud:
 scene:
   n_envs: 1
   es: 1
-  gui: 0
+  gui: 1
   cam:
     cam_pos: [1.2, 0, 1.2]
     look_at: [0.5, 0, 1]
@@ -133,14 +133,15 @@ verbose: True
 
 
 data:
+  num_episodes: 100
   num_points: 607
   train_split: 0.9
-  filename: point_clouds
+  filename: point_clouds_good
   use_saved_data: False
 
 logging:
   log_enable: True
-  comment: point_clouds
+  comment: point_clouds_correct_labels
 
 anet_training:
   batch_size: 

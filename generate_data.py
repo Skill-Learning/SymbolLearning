@@ -230,9 +230,11 @@ class GenerateData():
         pcs_world = [camera_poses[i] * pc for i, pc in enumerate(pcs_cam)]
 
         point_cloud=[]
+        point_cloud_vis=[]
         for i, pc in enumerate(pcs_world):
 
             points=pc.data.T
+            points_vis=pc.data.T
             loc_z=np.where(points[:,2]>0.81,True,False)
             points=points[loc_z]
             
@@ -253,10 +255,10 @@ class GenerateData():
             points=points[loc_y]
 
             point_cloud.append(points)
+            point_cloud_vis.append(points_vis)
             
         
         point_cloud=np.concatenate(point_cloud)
-        import ipdb; ipdb.set_trace()
         #Change Normals
         min_z = np.min(point_cloud[:,2])
         max_z = np.max(point_cloud[:,2])
@@ -302,11 +304,15 @@ class GenerateData():
             for camera_pose in camera_poses:
                 vis3d.pose(camera_pose)
 
-            # vis3d.points(
-            #         points[indices[0]], 
-            #         color=cm.tab10.colors[i],
-            #         scale=0.005
-            #     )
+                vis3d.points(
+                        points[indices[0]], 
+                        color=cm.tab10.colors[i],
+                        scale=0.005
+                    )
+
+            # pcd_vis=o3d.geometry.PointCloud()
+            # pcd_vis.points = o3d.utility.Vector3dVector(np.concatenate((point_cloud_vis)))
+            # o3d.io.write_point_cloud('test.pcd', pcd_vis)
 
             # vis3d.points(
             #         centroid, 
@@ -314,9 +320,9 @@ class GenerateData():
             #         scale=0.005
             #     )
 
-            o3d.visualization.draw_geometries([pcd], point_show_normal=True)
+            # o3d.visualization.draw_geometries([pcd], point_show_normal=True)
 
-            # vis3d.show()
+            vis3d.show()
         return {'full_point':points, 'downsampled_point':points[indices], 'normals':np.asarray(pcd.normals)[indices[0]], 'centoid':centroid}
 
     def run_episode(self):

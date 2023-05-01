@@ -27,6 +27,7 @@ class AffordanceNet(nn.Module):
         """
 
         # point cloud feature extraction 
+        # import ipdb; ipdb.set_trace()
         grasping_point_input = grasping_point
         point_cloud_accum = torch.cat((point_cloud, grasping_point_input), dim=1)
         point_accum_feats = self.pointnet(point_cloud_accum)
@@ -35,6 +36,7 @@ class AffordanceNet(nn.Module):
         grasping_point_feats = point_accum_feats[:, -1, :]
 
         attended_feats=self.attention(point_feats, grasping_point_feats)
+        # import ipdb; ipdb.set_trace()
         x, _=attended_feats.max(dim=1)
         quality_pred = self.quality_head(x)
         action_pred = self.action_head(x)
